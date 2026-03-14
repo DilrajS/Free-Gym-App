@@ -61,9 +61,27 @@ function createExercise(name = '') {
   return { id: createId(), name, sets: [{ id: createId(), weight: '', reps: '' }] };
 }
 
-function createWorkout(type, customTitle = '') {
+function getTemplateForType(type, workouts) {
+  if (type === 'Custom') return ['Exercise 1'];
+
+  const lastWorkoutOfType = [...workouts]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .find((workout) => workout.type === type);
+
+  if (lastWorkoutOfType?.exercises?.length) {
+    const savedNames = lastWorkoutOfType.exercises
+      .map((exercise) => String(exercise.name || '').trim())
+      .filter(Boolean);
+
+    if (savedNames.length) return savedNames;
+  }
+
+  return TEMPLATES[type] || [];
+}
+
+function createWorkout(type, customTitle = '', workouts = []) {
   const label = type === 'Custom' ? (customTitle.trim() || 'Custom Workout') : type;
-  const template = type === 'Custom' ? ['Exercise 1'] : TEMPLATES[type] || [];
+  const template = getTemplateForType(type, workouts);
 
   return {
     id: createId(),
@@ -696,7 +714,7 @@ export default function App() {
   }, [timerActive]);
 
   const startWorkout = (type, customName = '') => {
-    setActiveWorkout(createWorkout(type, customName));
+    setActiveWorkout(createWorkout(type, customName, workouts));
     setTab('Workout');
     setTimerActive(false);
     setSecondsLeft(DEFAULT_REST_SECONDS);
