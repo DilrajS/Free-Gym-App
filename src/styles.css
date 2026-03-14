@@ -65,30 +65,52 @@ input:focus, select:focus {
   width: 82px;
   height: 82px;
   border-radius: 26px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.06);
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.12), transparent 32%),
+    linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
   display: grid;
   place-items: center;
   box-shadow: var(--shadow);
 }
-.brand-icon span {
+.brand-mark {
   position: relative;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   display: block;
 }
-.brand-icon span::before,
-.brand-icon span::after {
-  content: "";
+.brand-mark-ring,
+.brand-mark-bar,
+.brand-mark-dot {
   position: absolute;
-  width: 12px;
-  height: 34px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
 }
-.brand-icon span::before { left: 0; }
-.brand-icon span::after { right: 0; }
-.brand-icon span { background: linear-gradient(90deg, var(--accent-strong), var(--accent)); background-size: 100% 10px; background-repeat: no-repeat; background-position: center; }
+.brand-mark-ring {
+  inset: 0;
+  border-radius: 14px;
+  border: 7px solid var(--accent-strong);
+  border-right-width: 9px;
+  border-bottom-color: var(--accent);
+  transform: rotate(12deg);
+  box-shadow: 0 0 18px rgba(229, 72, 77, 0.22);
+}
+.brand-mark-bar {
+  width: 19px;
+  height: 7px;
+  right: 2px;
+  top: 16px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-strong), #ffa3a5);
+  transform: rotate(-28deg);
+}
+.brand-mark-dot {
+  width: 8px;
+  height: 8px;
+  right: -1px;
+  top: 4px;
+  border-radius: 999px;
+  background: #ffd0d1;
+  box-shadow: 0 0 12px rgba(255, 208, 209, 0.45);
+}
 .eyebrow {
   margin: 0 0 8px;
   color: var(--muted);

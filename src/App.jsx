@@ -223,7 +223,11 @@ function ChooseWorkoutScreen({ onStart }) {
     <div className="screen screen-home">
       <div className="brand-lockup">
         <div className="brand-icon" aria-hidden="true">
-          <span />
+          <span className="brand-mark">
+            <span className="brand-mark-ring" />
+            <span className="brand-mark-bar" />
+            <span className="brand-mark-dot" />
+          </span>
         </div>
         <div>
           <p className="eyebrow">Gym Log</p>
