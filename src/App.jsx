@@ -224,9 +224,16 @@ function ChooseWorkoutScreen({ onStart }) {
       <div className="brand-lockup">
         <div className="brand-icon" aria-hidden="true">
           <span className="brand-mark">
-            <span className="brand-mark-ring" />
-            <span className="brand-mark-bar" />
-            <span className="brand-mark-dot" />
+            <span className="brand-rack-upright left" />
+            <span className="brand-rack-upright right" />
+            <span className="brand-rack-base" />
+            <span className="brand-rack-bench" />
+            <span className="brand-rack-post" />
+            <span className="brand-rack-barbell" />
+            <span className="brand-rack-weight left outer" />
+            <span className="brand-rack-weight left inner" />
+            <span className="brand-rack-weight right inner" />
+            <span className="brand-rack-weight right outer" />
           </span>
         </div>
         <div>

@@ -75,41 +75,83 @@ input:focus, select:focus {
 }
 .brand-mark {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 40px;
   display: block;
 }
-.brand-mark-ring,
-.brand-mark-bar,
-.brand-mark-dot {
+.brand-rack-upright,
+.brand-rack-base,
+.brand-rack-bench,
+.brand-rack-post,
+.brand-rack-barbell,
+.brand-rack-weight {
   position: absolute;
 }
-.brand-mark-ring {
-  inset: 0;
-  border-radius: 14px;
-  border: 7px solid var(--accent-strong);
-  border-right-width: 9px;
-  border-bottom-color: var(--accent);
-  transform: rotate(12deg);
-  box-shadow: 0 0 18px rgba(229, 72, 77, 0.22);
-}
-.brand-mark-bar {
-  width: 19px;
-  height: 7px;
-  right: 2px;
-  top: 16px;
+.brand-rack-upright {
+  top: 6px;
+  width: 5px;
+  height: 24px;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-strong), #ffa3a5);
-  transform: rotate(-28deg);
+  background: linear-gradient(180deg, #ffd5d6, var(--accent-strong));
+  box-shadow: 0 0 12px rgba(229, 72, 77, 0.16);
 }
-.brand-mark-dot {
-  width: 8px;
-  height: 8px;
-  right: -1px;
-  top: 4px;
+.brand-rack-upright.left { left: 8px; }
+.brand-rack-upright.right { right: 8px; }
+.brand-rack-base {
+  left: 4px;
+  right: 4px;
+  bottom: 5px;
+  height: 5px;
   border-radius: 999px;
-  background: #ffd0d1;
-  box-shadow: 0 0 12px rgba(255, 208, 209, 0.45);
+  background: linear-gradient(90deg, rgba(255,255,255,0.92), rgba(255,255,255,0.58));
+}
+.brand-rack-bench {
+  left: 14px;
+  bottom: 11px;
+  width: 20px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-strong), #ff9a9d);
+}
+.brand-rack-post {
+  left: 17px;
+  bottom: 11px;
+  width: 4px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.92);
+}
+.brand-rack-barbell {
+  left: 6px;
+  right: 6px;
+  top: 11px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff6f6, #ffd5d6);
+}
+.brand-rack-weight {
+  top: 6px;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+}
+.brand-rack-weight.left.outer {
+  left: 3px;
+  height: 13px;
+}
+.brand-rack-weight.left.inner {
+  left: 0;
+  height: 10px;
+  top: 7px;
+}
+.brand-rack-weight.right.inner {
+  right: 0;
+  height: 10px;
+  top: 7px;
+}
+.brand-rack-weight.right.outer {
+  right: 3px;
+  height: 13px;
 }
 .eyebrow {
   margin: 0 0 8px;
