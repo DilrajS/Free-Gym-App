@@ -37,6 +37,10 @@ function todayValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function nowValue() {
+  return new Date().toISOString();
+}
+
 function formatLongDate(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
     weekday: 'long',
@@ -50,6 +54,14 @@ function formatShortDate(value) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+}
+
+function formatTime(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
   });
 }
 
@@ -86,6 +98,7 @@ function createWorkout(type, customTitle = '', workouts = []) {
   return {
     id: createId(),
     date: todayValue(),
+    startedAt: nowValue(),
     type,
     label,
     exercises: template.map((name) => createExercise(name)),
@@ -515,8 +528,14 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header">
-        <h2>History</h2>
+      <header className="panel-header history-header">
+        <div className="panel-title-wrap">
+          <History size={22} strokeWidth={2.2} />
+          <div>
+            <h2>History</h2>
+            <p>Your saved workouts by day, time, and type.</p>
+          </div>
+        </div>
       </header>
       {ordered.map((workout) => {
         const isOpen = expanded === workout.id;
@@ -525,7 +544,13 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
             <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
               <div>
                 <strong>{formatShortDate(workout.date)} - {workout.label}</strong>
-                <p>{workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' • ')}</p>
+                <p className="history-time">
+                  {workout.type}
+                  {formatTime(workout.startedAt) ? ` • ${formatTime(workout.startedAt)}` : ''}
+                </p>
+                <p className="history-meta">
+                  {workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' • ')}
+                </p>
               </div>
               <span>{isOpen ? '-' : '+'}</span>
             </button>
@@ -678,7 +703,7 @@ function BackupScreen({ workouts, onImport, onReset }) {
         </div>
         <div className="warning-card">
           <strong>Warning</strong>
-          <p>Reset deletes every saved workout on this device. Export a backup first if you may need your history later.</p>
+          <p>Reset deletes every saved workouts on this device. Export a backup first if you may need your history later.</p>
         </div>
         <button type="button" className="text-link danger-link reset-link" onClick={onReset}>
           Reset all local data
@@ -748,6 +773,7 @@ export default function App() {
       ...source,
       id: createId(),
       date: todayValue(),
+      startedAt: nowValue(),
       exercises: source.exercises.map((exercise) => ({
         ...exercise,
         id: createId(),
