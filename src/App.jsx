@@ -1,13 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ChartColumn,
+  ClipboardList,
+  Dumbbell,
+  FileArchive,
+  FileUp,
+  History,
+  Plus,
+  SquarePen,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 const STORAGE_KEY = 'gym-log-v2';
 const TABS = ['Workout', 'History', 'Charts', 'Backup'];
-const TEMPLATE_ORDER = ['Upper', 'Push', 'Pull', 'Legs', 'Full Body'];
+const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Lower', 'Full Body'];
 const TEMPLATES = {
   Upper: ['Bench Press', 'Barbell Row', 'Shoulder Press', 'Lat Pulldown', 'Bicep Curl'],
   Push: ['Bench Press', 'Incline DB Press', 'Shoulder Press', 'Lateral Raise', 'Tricep Pushdown'],
   Pull: ['Lat Pulldown', 'Barbell Row', 'Seated Cable Row', 'Hammer Curl', 'Face Pull'],
-  Legs: ['Back Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl', 'Calf Raise'],
+  Lower: ['Back Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl', 'Calf Raise'],
   'Full Body': ['Back Squat', 'Bench Press', 'Deadlift', 'Pull Up', 'Farmer Carry'],
 };
 const DEFAULT_REST_SECONDS = 120;
@@ -47,7 +63,8 @@ function createExercise(name = '') {
 
 function createWorkout(type, customTitle = '') {
   const label = type === 'Custom' ? (customTitle.trim() || 'Custom Workout') : type;
-  const template = type === 'Custom' ? ['Exercise 1'] : (TEMPLATES[type] || []);
+  const template = type === 'Custom' ? ['Exercise 1'] : TEMPLATES[type] || [];
+
   return {
     id: createId(),
     date: todayValue(),
@@ -72,6 +89,10 @@ function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
+function formatSetSummary(set) {
+  return `${set.weight}x${set.reps}`;
+}
+
 function findLastExercise(workouts, currentWorkoutId, exerciseName) {
   const normalized = normalizeName(exerciseName);
   if (!normalized) return null;
@@ -85,7 +106,7 @@ function findLastExercise(workouts, currentWorkoutId, exerciseName) {
       if (normalizeName(exercise.name) === normalized) {
         const completeSets = (exercise.sets || []).filter((set) => set.weight !== '' && set.reps !== '');
         if (!completeSets.length) return null;
-        return completeSets.map((set) => `${set.weight}×${set.reps}`).join(', ');
+        return completeSets.map(formatSetSummary).join(', ');
       }
     }
   }
@@ -123,30 +144,36 @@ function getExerciseSeries(workouts, exerciseName) {
             0,
           );
 
-          return best > 0
-            ? {
-                date: workout.date,
-                weight: best,
-              }
-            : null;
+          return best > 0 ? { date: workout.date, weight: best } : null;
         }),
     )
     .filter(Boolean);
 }
 
 function BottomNav({ tab, onChange }) {
+  const tabIcons = {
+    Workout: Dumbbell,
+    History,
+    Charts: ChartColumn,
+    Backup: FileArchive,
+  };
+
   return (
     <nav className="bottom-nav">
-      {TABS.map((item) => (
-        <button
-          key={item}
-          type="button"
-          className={`tab-button ${tab === item ? 'active' : ''}`}
-          onClick={() => onChange(item)}
-        >
-          {item}
-        </button>
-      ))}
+      {TABS.map((item) => {
+        const Icon = tabIcons[item];
+        return (
+          <button
+            key={item}
+            type="button"
+            className={`tab-button ${tab === item ? 'active' : ''}`}
+            onClick={() => onChange(item)}
+          >
+            <Icon size={18} strokeWidth={2.2} />
+            {item}
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -154,6 +181,12 @@ function BottomNav({ tab, onChange }) {
 function ChooseWorkoutScreen({ onStart }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
+  const customSheetRef = useRef(null);
+
+  useEffect(() => {
+    if (!showCustom) return;
+    customSheetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [showCustom]);
 
   return (
     <div className="screen screen-home">
@@ -171,18 +204,36 @@ function ChooseWorkoutScreen({ onStart }) {
         {TEMPLATE_ORDER.map((item) => (
           <button key={item} type="button" className="workout-choice" onClick={() => onStart(item)}>
             <span>{item}</span>
-            <strong>›</strong>
+            <strong>
+              <ArrowRight size={24} strokeWidth={2.4} />
+            </strong>
           </button>
         ))}
       </div>
 
       {!showCustom ? (
         <button type="button" className="text-link" onClick={() => setShowCustom(true)}>
+          <SquarePen size={16} strokeWidth={2.2} />
           Custom workout
         </button>
       ) : (
-        <div className="custom-sheet">
-          <label className="field-label" htmlFor="custom-workout-name">Workout name</label>
+        <div className="custom-sheet" ref={customSheetRef}>
+          <div className="sheet-header">
+            <label className="field-label" htmlFor="custom-workout-name">
+              Workout name
+            </label>
+            <button
+              type="button"
+              className="sheet-close"
+              aria-label="Close custom workout"
+              onClick={() => {
+                setShowCustom(false);
+                setCustomName('');
+              }}
+            >
+              <X size={18} strokeWidth={2.4} />
+            </button>
+          </div>
           <input
             id="custom-workout-name"
             type="text"
@@ -191,6 +242,7 @@ function ChooseWorkoutScreen({ onStart }) {
             onChange={(event) => setCustomName(event.target.value)}
           />
           <button type="button" className="primary-button" onClick={() => onStart('Custom', customName)}>
+            <ClipboardList size={18} strokeWidth={2.2} />
             Start workout
           </button>
         </div>
@@ -205,7 +257,7 @@ function TimerPill({ secondsLeft, active, onReset }) {
   const seconds = String(secondsLeft % 60).padStart(2, '0');
 
   return (
-    <button type="button" className="timer-pill" onClick={onReset}>
+    <button type="button" className="timer-pill timer-pill-active" onClick={onReset}>
       {minutes}:{seconds}
     </button>
   );
@@ -258,10 +310,7 @@ function ActiveWorkoutScreen({
         const previous = exercise.sets[exercise.sets.length - 1];
         return {
           ...exercise,
-          sets: [
-            ...exercise.sets,
-            { id: createId(), weight: previous?.weight || '', reps: '' },
-          ],
+          sets: [...exercise.sets, { id: createId(), weight: previous?.weight || '', reps: '' }],
         };
       }),
     });
@@ -317,7 +366,8 @@ function ActiveWorkoutScreen({
       <header className="session-header">
         <div>
           <button type="button" className="back-link" onClick={() => onUpdate(null)}>
-            ‹ Change workout
+            <ArrowLeft size={16} strokeWidth={2.3} />
+            Change workout
           </button>
           <h2>{workout.label}</h2>
           <p>{formatLongDate(workout.date)}</p>
@@ -349,13 +399,13 @@ function ActiveWorkoutScreen({
                 </div>
                 <div className="exercise-actions">
                   <button type="button" className="icon-button" onClick={() => moveExercise(index, -1)} aria-label="Move up">
-                    ↑
+                    <ArrowUp size={16} strokeWidth={2.4} />
                   </button>
                   <button type="button" className="icon-button" onClick={() => moveExercise(index, 1)} aria-label="Move down">
-                    ↓
+                    <ArrowDown size={16} strokeWidth={2.4} />
                   </button>
                   <button type="button" className="icon-button danger" onClick={() => removeExercise(exercise.id)} aria-label="Remove exercise">
-                    ×
+                    <Trash2 size={16} strokeWidth={2.2} />
                   </button>
                 </div>
               </div>
@@ -387,14 +437,15 @@ function ActiveWorkoutScreen({
                       onBlur={() => handleRepsBlur(exercise.id, set.id)}
                     />
                     <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
-                      ×
+                      <X size={16} strokeWidth={2.4} />
                     </button>
                   </div>
                 ))}
               </div>
 
               <button type="button" className="secondary-button" onClick={() => addSet(exercise.id)}>
-                + Add set
+                <Plus size={16} strokeWidth={2.4} />
+                Add set
               </button>
             </section>
           );
@@ -411,6 +462,7 @@ function ActiveWorkoutScreen({
             onChange={(event) => setExerciseInput(event.target.value)}
           />
           <button type="button" className="primary-button small" onClick={() => addExercise(exerciseInput)}>
+            <Plus size={16} strokeWidth={2.4} />
             Add
           </button>
           <datalist id="all-exercise-options">
@@ -445,24 +497,31 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header"><h2>History</h2></header>
+      <header className="panel-header">
+        <h2>History</h2>
+      </header>
       {ordered.map((workout) => {
         const isOpen = expanded === workout.id;
         return (
           <section key={workout.id} className="history-card">
             <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
               <div>
-                <strong>{formatShortDate(workout.date)} — {workout.label}</strong>
+                <strong>{formatShortDate(workout.date)} - {workout.label}</strong>
                 <p>{workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' • ')}</p>
               </div>
-              <span>{isOpen ? '−' : '+'}</span>
+              <span>{isOpen ? '-' : '+'}</span>
             </button>
             {isOpen ? (
               <div className="history-details">
                 {workout.exercises.map((exercise) => (
                   <div key={exercise.id} className="history-exercise">
                     <h3>{exercise.name || 'Untitled Exercise'}</h3>
-                    <p>{exercise.sets.filter((set) => set.weight !== '' && set.reps !== '').map((set) => `${set.weight}×${set.reps}`).join(', ') || 'No completed sets'}</p>
+                    <p>
+                      {exercise.sets
+                        .filter((set) => set.weight !== '' && set.reps !== '')
+                        .map(formatSetSummary)
+                        .join(', ') || 'No completed sets'}
+                    </p>
                   </div>
                 ))}
                 <button type="button" className="text-link danger-link" onClick={() => onOpenWorkout(workout.id)}>
@@ -489,14 +548,18 @@ function ChartsScreen({ workouts }) {
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header"><h2>Charts</h2></header>
+      <header className="panel-header">
+        <h2>Charts</h2>
+      </header>
       {!exerciseNames.length ? (
         <div className="empty-panel">Save a workout first to unlock charts.</div>
       ) : (
         <>
           <select value={selected} onChange={(event) => setSelected(event.target.value)} className="select-input">
             {exerciseNames.map((name) => (
-              <option key={name} value={name}>{name}</option>
+              <option key={name} value={name}>
+                {name}
+              </option>
             ))}
           </select>
           <section className="chart-card">
@@ -576,15 +639,32 @@ function BackupScreen({ workouts, onImport, onReset }) {
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header"><h2>Backup</h2></header>
+      <header className="panel-header">
+        <h2>Backup</h2>
+      </header>
       <section className="backup-card">
-        <p>Your workouts stay on this device until you export them.</p>
-        <button type="button" className="primary-button" onClick={exportData}>Export data</button>
-        <label className="file-button">
-          Import data
-          <input type="file" accept="application/json" onChange={handleImport} />
-        </label>
-        <button type="button" className="text-link danger-link" onClick={onReset}>Reset all local data</button>
+        <div className="backup-copy">
+          <p>Your workouts stay on this device unless you export a backup file.</p>
+          <p>Export saves all workouts into one JSON file. Import replaces the workouts currently on this phone with the file you choose.</p>
+        </div>
+        <div className="backup-actions">
+          <button type="button" className="primary-button" onClick={exportData}>
+            <FileArchive size={18} strokeWidth={2.2} />
+            Export data
+          </button>
+          <label className="file-button">
+            <FileUp size={18} strokeWidth={2.2} />
+            Import data
+            <input type="file" accept="application/json" onChange={handleImport} />
+          </label>
+        </div>
+        <div className="warning-card">
+          <strong>Warning</strong>
+          <p>Reset deletes every saved workout on this device. Export a backup first if you may need your history later.</p>
+        </div>
+        <button type="button" className="text-link danger-link reset-link" onClick={onReset}>
+          Reset all local data
+        </button>
       </section>
     </div>
   );
@@ -638,7 +718,7 @@ export default function App() {
       setWorkouts(parsed.workouts);
       setActiveWorkout(null);
       setTab('History');
-    } catch (error) {
+    } catch {
       window.alert('Could not import that backup file.');
     }
   };
@@ -660,7 +740,7 @@ export default function App() {
   };
 
   const resetData = () => {
-    if (!window.confirm('Delete all saved workouts from this device?')) return;
+    if (!window.confirm('Delete all saved workouts from this device? This cannot be undone unless you exported a backup first.')) return;
     setWorkouts([]);
     setActiveWorkout(null);
     localStorage.removeItem(STORAGE_KEY);

@@ -27,6 +27,7 @@ body {
 }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+button svg { flex-shrink: 0; }
 input, select {
   width: 100%;
   border: 1px solid var(--border);
@@ -112,7 +113,14 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
-.workout-choice strong { color: #747e89; font-size: 2rem; font-weight: 500; }
+.workout-choice strong {
+  color: #747e89;
+  font-size: 2rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .text-link {
   background: transparent;
   border: none;
@@ -121,6 +129,9 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   text-decoration: underline;
   justify-self: center;
   padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .custom-sheet, .backup-card, .chart-card, .history-card, .empty-panel, .exercise-card, .add-exercise-card {
   background: linear-gradient(180deg, rgba(21,24,29,0.95), rgba(17,20,25,0.98));
@@ -130,6 +141,23 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .custom-sheet, .backup-card, .empty-panel, .chart-card, .add-exercise-card { padding: 18px; }
 .custom-sheet { display: grid; gap: 12px; }
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sheet-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .field-label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
 .primary-button, .secondary-button, .finish-button, .file-button {
   border: none;
@@ -137,6 +165,10 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   min-height: 50px;
   padding: 0 16px;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 .primary-button, .finish-button {
   background: linear-gradient(135deg, var(--accent-strong), var(--accent));
@@ -176,6 +208,10 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   color: var(--muted);
   background: transparent;
   font-weight: 700;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
 }
 .tab-button.active {
   color: white;
@@ -194,15 +230,21 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   border: none;
   color: var(--muted);
   padding: 0 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .timer-pill {
-  border: 1px solid rgba(229,72,77,0.28);
-  background: rgba(229,72,77,0.1);
   color: white;
   min-width: 72px;
   height: 40px;
   border-radius: 999px;
   font-weight: 700;
+}
+.timer-pill-active {
+  border: 1px solid rgba(92, 214, 141, 0.42);
+  background: linear-gradient(135deg, rgba(46, 160, 67, 0.95), rgba(92, 214, 141, 0.82));
+  box-shadow: 0 10px 24px rgba(46, 160, 67, 0.25);
 }
 .exercise-stack { display: grid; gap: 14px; }
 .exercise-card { padding: 16px; display: grid; gap: 14px; }
@@ -233,7 +275,13 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .icon-button { width: 36px; height: 36px; }
 .icon-button.danger, .danger-link { color: var(--accent-strong); }
-.mini-icon-button { width: 34px; height: 44px; }
+.mini-icon-button {
+  width: 34px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .set-table-header {
   display: grid;
   grid-template-columns: 40px 1fr 1fr 34px;
@@ -282,6 +330,33 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 .history-details { display: grid; gap: 14px; padding: 0 18px 18px; }
 .history-exercise h3 { font-size: 1rem; margin-bottom: 4px; }
 .history-exercise p, .backup-card p { color: var(--muted); line-height: 1.5; }
+.backup-card {
+  display: grid;
+  gap: 16px;
+}
+.backup-copy {
+  display: grid;
+  gap: 10px;
+}
+.backup-actions {
+  display: grid;
+  gap: 12px;
+}
+.warning-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(229,72,77,0.26);
+  background: rgba(229,72,77,0.08);
+}
+.warning-card strong {
+  color: #ffd5d6;
+}
+.reset-link {
+  justify-self: start;
+  padding-left: 0;
+}
 .select-input { background: var(--surface); }
 .chart-wrap { overflow-x: auto; }
 .chart-svg { width: 100%; min-width: 320px; height: auto; }
@@ -292,6 +367,7 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--border);
   color: var(--text);
@@ -317,4 +393,34 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   .app-shell { padding-left: 16px; padding-right: 16px; }
   .workout-choice { font-size: 1.4rem; padding: 20px 18px; }
   h2 { font-size: 1.7rem; }
+  .exercise-card,
+  .add-exercise-card,
+  .backup-card,
+  .custom-sheet {
+    padding: 16px;
+  }
+  .exercise-card-top,
+  .session-header,
+  .panel-header {
+    gap: 10px;
+  }
+  .exercise-actions {
+    gap: 4px;
+  }
+  .icon-button {
+    width: 34px;
+    height: 34px;
+  }
+  .set-table-header,
+  .set-row {
+    grid-template-columns: 34px 1fr 1fr 30px;
+    gap: 8px;
+  }
+  .mini-icon-button {
+    width: 30px;
+    height: 44px;
+  }
+  .backup-actions {
+    gap: 10px;
+  }
 }
