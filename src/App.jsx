@@ -526,10 +526,6 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
   const [expanded, setExpanded] = useState(null);
   const ordered = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  if (!ordered.length) {
-    return <div className="empty-panel">No workouts saved yet.</div>;
-  }
-
   return (
     <div className="screen stack-md">
       <header className="panel-header history-header">
@@ -541,6 +537,9 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
           </div>
         </div>
       </header>
+      {!ordered.length ? (
+        <div className="empty-panel">No workouts saved yet.</div>
+      ) : null}
       {ordered.map((workout) => {
         const isOpen = expanded === workout.id;
         return (
