@@ -9,7 +9,6 @@ import {
   Dumbbell,
   FileArchive,
   FileUp,
-  History,
   Plus,
   SquarePen,
   Trash2,
@@ -69,26 +68,43 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-function createExercise(name = '') {
-  return { id: createId(), name, sets: [{ id: createId(), weight: '', reps: '' }] };
+function createSet(previousSet = {}) {
+  return {
+    id: createId(),
+    weight: '',
+    reps: '',
+    previousWeight: previousSet.weight ?? '',
+    previousReps: previousSet.reps ?? '',
+  };
+}
+
+function createExercise(name = '', previousSets = []) {
+  const populatedSets = previousSets
+    .filter((set) => set.weight !== '' || set.reps !== '')
+    .map((set) => createSet(set));
+
+  return { id: createId(), name, sets: populatedSets.length ? populatedSets : [createSet()] };
 }
 
 function getTemplateForType(type, workouts) {
-  if (type === 'Custom') return ['Exercise 1'];
+  if (type === 'Custom') return [{ name: 'Exercise 1', sets: [] }];
 
   const lastWorkoutOfType = [...workouts]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .sort((a, b) => new Date(b.startedAt || b.date) - new Date(a.startedAt || a.date))
     .find((workout) => workout.type === type);
 
   if (lastWorkoutOfType?.exercises?.length) {
-    const savedNames = lastWorkoutOfType.exercises
-      .map((exercise) => String(exercise.name || '').trim())
-      .filter(Boolean);
+    const savedExercises = lastWorkoutOfType.exercises
+      .map((exercise) => ({
+        name: String(exercise.name || '').trim(),
+        sets: Array.isArray(exercise.sets) ? exercise.sets : [],
+      }))
+      .filter((exercise) => exercise.name);
 
-    if (savedNames.length) return savedNames;
+    if (savedExercises.length) return savedExercises;
   }
 
-  return TEMPLATES[type] || [];
+  return (TEMPLATES[type] || []).map((name) => ({ name, sets: [] }));
 }
 
 function createWorkout(type, customTitle = '', workouts = []) {
@@ -101,7 +117,7 @@ function createWorkout(type, customTitle = '', workouts = []) {
     startedAt: nowValue(),
     type,
     label,
-    exercises: template.map((name) => createExercise(name)),
+    exercises: template.map((exercise) => createExercise(exercise.name, exercise.sets)),
   };
 }
 
@@ -162,7 +178,7 @@ function getExerciseSeries(workouts, exerciseName) {
   const normalized = normalizeName(exerciseName);
   if (!normalized) return [];
 
-  return workouts
+  const points = workouts
     .sort((a, b) => new Date(a.date) - new Date(b.date))
     .flatMap((workout) =>
       (workout.exercises || [])
@@ -179,6 +195,38 @@ function getExerciseSeries(workouts, exerciseName) {
         }),
     )
     .filter(Boolean);
+
+  if (points.length === 1) {
+    const priorDate = new Date(`${points[0].date}T12:00:00`);
+    priorDate.setDate(priorDate.getDate() - 7);
+    return [{ date: priorDate.toISOString().slice(0, 10), weight: 0 }, points[0]];
+  }
+
+  return points;
+}
+
+function ConfettiLayer({ bursts }) {
+  return (
+    <div className="confetti-layer" aria-hidden="true">
+      {bursts.map((burst) =>
+        Array.from({ length: 14 }, (_, index) => {
+          const angle = (360 / 14) * index;
+          const distance = 44 + ((index * 9) % 42);
+          const style = {
+            left: `${burst.x}px`,
+            top: `${burst.y}px`,
+            '--dx': `${Math.cos((angle * Math.PI) / 180) * distance}px`,
+            '--dy': `${Math.sin((angle * Math.PI) / 180) * distance}px`,
+            '--delay': `${index * 16}ms`,
+            '--rotation': `${angle + 90}deg`,
+            '--color': ['#5cd68d', '#ffd166', '#ff6b6b', '#8ec5ff'][index % 4],
+          };
+
+          return <span key={`${burst.id}-${index}`} className="confetti-piece" style={style} />;
+        }),
+      )}
+    </div>
+  );
 }
 
 function BottomNav({ tab, onChange }) {
@@ -313,6 +361,7 @@ function ActiveWorkoutScreen({
   timerActive,
   secondsLeft,
   onResetTimer,
+  onCelebrate,
 }) {
   const [exerciseInput, setExerciseInput] = useState('');
   const exerciseNames = useMemo(() => collectExerciseNames(workouts, workout), [workouts, workout]);
@@ -352,7 +401,7 @@ function ActiveWorkoutScreen({
         const previous = exercise.sets[exercise.sets.length - 1];
         return {
           ...exercise,
-          sets: [...exercise.sets, { id: createId(), weight: previous?.weight || '', reps: '' }],
+          sets: [...exercise.sets, createSet(previous)],
         };
       }),
     });
@@ -392,19 +441,25 @@ function ActiveWorkoutScreen({
       ...workout,
       exercises:
         workout.exercises.length === 1
-          ? [createExercise('')]
+          ? [createExercise('', workout.exercises[0]?.sets)]
           : workout.exercises.filter((exercise) => exercise.id !== exerciseId),
     });
   };
 
-  const handleRepsBlur = (exerciseId, setId) => {
+  const handleRepsBlur = (exerciseId, setId, event) => {
     const exercise = workout.exercises.find((item) => item.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
-    if (set && set.weight !== '' && set.reps !== '') onResetTimer();
+    if (set && set.weight !== '' && set.reps !== '') {
+      onResetTimer();
+      onCelebrate?.(event?.target);
+    }
   };
 
   return (
     <div className="screen">
+      <div className="timer-sticky-wrap">
+        <TimerPill secondsLeft={secondsLeft} active={timerActive} onReset={onResetTimer} />
+      </div>
       <header className="session-header">
         <div>
           <button type="button" className="back-link" onClick={() => onUpdate(null)}>
@@ -414,7 +469,6 @@ function ActiveWorkoutScreen({
           <h2>{workout.label}</h2>
           <p>{formatLongDate(workout.date)}</p>
         </div>
-        <TimerPill secondsLeft={secondsLeft} active={timerActive} onReset={onResetTimer} />
       </header>
 
       <div className="exercise-stack">
@@ -466,17 +520,19 @@ function ActiveWorkoutScreen({
                     <input
                       inputMode="decimal"
                       type="number"
-                      placeholder="0"
+                      placeholder={set.previousWeight || '0'}
                       value={set.weight}
                       onChange={(event) => updateSet(exercise.id, set.id, 'weight', event.target.value)}
+                      className={set.previousWeight !== '' ? 'input-with-history' : ''}
                     />
                     <input
                       inputMode="numeric"
                       type="number"
-                      placeholder="0"
+                      placeholder={set.previousReps || '0'}
                       value={set.reps}
                       onChange={(event) => updateSet(exercise.id, set.id, 'reps', event.target.value)}
-                      onBlur={() => handleRepsBlur(exercise.id, set.id)}
+                      onBlur={(event) => handleRepsBlur(exercise.id, set.id, event)}
+                      className={set.previousReps !== '' ? 'input-with-history' : ''}
                     />
                     <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
                       <X size={16} strokeWidth={2.4} />
@@ -529,20 +585,28 @@ function ActiveWorkoutScreen({
   );
 }
 
-function HistoryScreen({ workouts, onOpenWorkout }) {
+function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout }) {
   const [expanded, setExpanded] = useState(null);
+  const [swipedId, setSwipedId] = useState(null);
+  const touchStartX = useRef(0);
   const ordered = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const handleTouchStart = (event, workoutId) => {
+    touchStartX.current = event.changedTouches[0]?.clientX || 0;
+    if (swipedId && swipedId !== workoutId) setSwipedId(null);
+  };
+
+  const handleTouchEnd = (event, workoutId) => {
+    const endX = event.changedTouches[0]?.clientX || 0;
+    const delta = endX - touchStartX.current;
+    if (delta < -50) setSwipedId(workoutId);
+    if (delta > 40) setSwipedId(null);
+  };
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header history-header">
-        <div className="panel-title-wrap">
-          <History size={22} strokeWidth={2.2} />
-          <div>
-            <h2>History</h2>
-            <p>Your saved workouts by day, time, and type.</p>
-          </div>
-        </div>
+      <header className="panel-header">
+        <h2>History</h2>
       </header>
       {!ordered.length ? (
         <div className="empty-panel">No workouts saved yet.</div>
@@ -550,8 +614,24 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
       {ordered.map((workout) => {
         const isOpen = expanded === workout.id;
         return (
-          <section key={workout.id} className="history-card">
-            <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
+          <div key={workout.id} className={`history-row ${swipedId === workout.id ? 'swiped' : ''}`}>
+            <button
+              type="button"
+              className="history-delete"
+              onClick={() => {
+                if (expanded === workout.id) setExpanded(null);
+                setSwipedId(null);
+                onDeleteWorkout(workout.id);
+              }}
+            >
+              Delete
+            </button>
+            <section
+              className="history-card"
+              onTouchStart={(event) => handleTouchStart(event, workout.id)}
+              onTouchEnd={(event) => handleTouchEnd(event, workout.id)}
+            >
+              <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
               <div>
                 <strong>{formatShortDate(workout.date)} - {workout.label}</strong>
                 <p className="history-time">
@@ -563,9 +643,9 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
                 </p>
               </div>
               <span>{isOpen ? '-' : '+'}</span>
-            </button>
-            {isOpen ? (
-              <div className="history-details">
+              </button>
+              {isOpen ? (
+                <div className="history-details">
                 {workout.exercises.map((exercise) => (
                   <div key={exercise.id} className="history-exercise">
                     <h3>{exercise.name || 'Untitled Exercise'}</h3>
@@ -577,12 +657,13 @@ function HistoryScreen({ workouts, onOpenWorkout }) {
                     </p>
                   </div>
                 ))}
-                <button type="button" className="text-link danger-link" onClick={() => onOpenWorkout(workout.id)}>
-                  Copy into a new workout
-                </button>
-              </div>
-            ) : null}
-          </section>
+                  <button type="button" className="text-link danger-link" onClick={() => onOpenWorkout(workout.id)}>
+                    Copy into a new workout
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          </div>
         );
       })}
     </div>
@@ -616,11 +697,7 @@ function ChartsScreen({ workouts }) {
             ))}
           </select>
           <section className="chart-card">
-            {points.length < 2 ? (
-              <div className="empty-panel chart-empty">Need at least two logged days for a trend line.</div>
-            ) : (
-              <MiniChart points={points} />
-            )}
+            <MiniChart points={points} />
           </section>
         </>
       )}
@@ -729,6 +806,7 @@ export default function App() {
   const [activeWorkout, setActiveWorkout] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_REST_SECONDS);
   const [timerActive, setTimerActive] = useState(false);
+  const [confettiBursts, setConfettiBursts] = useState([]);
 
   useEffect(() => {
     saveData({ workouts });
@@ -793,6 +871,24 @@ export default function App() {
     setTab('Workout');
   };
 
+  const deleteWorkout = (workoutId) => {
+    setWorkouts((current) => current.filter((workout) => workout.id !== workoutId));
+  };
+
+  const celebrateSet = (target) => {
+    const rect = target?.getBoundingClientRect?.();
+    const burst = {
+      id: createId(),
+      x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      y: rect ? rect.top + rect.height / 2 : 180,
+    };
+
+    setConfettiBursts((current) => [...current, burst]);
+    window.setTimeout(() => {
+      setConfettiBursts((current) => current.filter((item) => item.id !== burst.id));
+    }, 1100);
+  };
+
   const resetData = () => {
     if (!window.confirm('Delete all saved workouts from this device? This cannot be undone unless you exported a backup first.')) return;
     setWorkouts([]);
@@ -811,6 +907,7 @@ export default function App() {
           onFinish={finishWorkout}
           timerActive={timerActive}
           secondsLeft={secondsLeft}
+          onCelebrate={celebrateSet}
           onResetTimer={() => {
             setSecondsLeft(DEFAULT_REST_SECONDS);
             setTimerActive(true);
@@ -820,7 +917,7 @@ export default function App() {
         <ChooseWorkoutScreen onStart={startWorkout} />
       )
     ) : tab === 'History' ? (
-      <HistoryScreen workouts={workouts} onOpenWorkout={copyWorkoutToActive} />
+      <HistoryScreen workouts={workouts} onOpenWorkout={copyWorkoutToActive} onDeleteWorkout={deleteWorkout} />
     ) : tab === 'Charts' ? (
       <ChartsScreen workouts={workouts} />
     ) : (
@@ -829,6 +926,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <ConfettiLayer bursts={confettiBursts} />
       {content}
       <BottomNav tab={tab} onChange={setTab} />
     </div>
