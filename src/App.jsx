@@ -618,7 +618,10 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
   return (
     <div className="screen stack-md">
       <header className="panel-header">
-        <h2>History</h2>
+        <div className="panel-copy">
+          <h2>History</h2>
+          <p>Your saved workouts by day, time, and type.</p>
+        </div>
       </header>
       {!ordered.length ? (
         <div className="empty-panel">No workouts saved yet.</div>
@@ -705,7 +708,10 @@ function ChartsScreen({ workouts }) {
   return (
     <div className="screen stack-md">
       <header className="panel-header">
-        <h2>Charts</h2>
+        <div className="panel-copy">
+          <h2>Charts</h2>
+          <p>See your top weights over time for each exercise you log.</p>
+        </div>
       </header>
       {!exerciseNames.length ? (
         <div className="empty-panel">Save a workout first to unlock charts.</div>
@@ -792,12 +798,16 @@ function BackupScreen({ workouts, onImport, onReset }) {
   return (
     <div className="screen stack-md">
       <header className="panel-header">
-        <h2>Backup</h2>
+        <div className="panel-copy">
+          <h2>Backup</h2>
+          <p>Keep a copy of your workouts in case this phone or browser data ever gets reset.</p>
+        </div>
       </header>
       <section className="backup-card">
         <div className="backup-copy">
-          <p>Your workouts stay on this device unless you export a backup file.</p>
-          <p>Export saves all workouts into one JSON file. Import replaces the workouts currently on this phone with the file you choose.</p>
+          <p>Your workouts are saved in this browser on this device, so they should stay here as long as you keep using the same iPhone and browser and do not clear website data.</p>
+          <p>Export creates a backup JSON file you can keep in Files or iCloud. Import restores workouts from that file if you ever lose local browser data or move to another device.</p>
+          <p>Clearing Safari website data, removing browser app data, or switching phones without restoring that browser data can remove your saved workouts. Normal app updates and page refreshes should not delete them.</p>
         </div>
         <div className="backup-actions">
           <button type="button" className="primary-button" onClick={exportData}>

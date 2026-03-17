@@ -436,6 +436,14 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .history-summary p { color: var(--muted); margin-top: 6px; line-height: 1.45; }
 .history-summary span { color: var(--muted); font-size: 1.35rem; }
+.panel-copy {
+  display: grid;
+  gap: 6px;
+}
+.panel-copy p {
+  color: var(--muted);
+  line-height: 1.45;
+}
 .history-time {
   color: #d8dee5;
   font-size: 0.92rem;
