@@ -364,6 +364,7 @@ function ActiveWorkoutScreen({
   onCelebrate,
 }) {
   const [exerciseInput, setExerciseInput] = useState('');
+  const [lastEditedFieldId, setLastEditedFieldId] = useState('');
   const exerciseNames = useMemo(() => collectExerciseNames(workouts, workout), [workouts, workout]);
   const suggestions = useMemo(() => {
     const fromTemplate = TEMPLATES[workout.type] || [];
@@ -380,6 +381,7 @@ function ActiveWorkoutScreen({
   };
 
   const updateSet = (exerciseId, setId, field, value) => {
+    setLastEditedFieldId(`${exerciseId}-${setId}-${field}`);
     onUpdate({
       ...workout,
       exercises: workout.exercises.map((exercise) =>
@@ -523,7 +525,12 @@ function ActiveWorkoutScreen({
                       placeholder={set.previousWeight || '0'}
                       value={set.weight}
                       onChange={(event) => updateSet(exercise.id, set.id, 'weight', event.target.value)}
-                      className={set.previousWeight !== '' ? 'input-with-history' : ''}
+                      className={[
+                        set.previousWeight !== '' ? 'input-with-history' : '',
+                        lastEditedFieldId === `${exercise.id}-${set.id}-weight` ? 'last-edited-input' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                     />
                     <input
                       inputMode="numeric"
@@ -532,7 +539,12 @@ function ActiveWorkoutScreen({
                       value={set.reps}
                       onChange={(event) => updateSet(exercise.id, set.id, 'reps', event.target.value)}
                       onBlur={(event) => handleRepsBlur(exercise.id, set.id, event)}
-                      className={set.previousReps !== '' ? 'input-with-history' : ''}
+                      className={[
+                        set.previousReps !== '' ? 'input-with-history' : '',
+                        lastEditedFieldId === `${exercise.id}-${set.id}-reps` ? 'last-edited-input' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                     />
                     <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
                       <X size={16} strokeWidth={2.4} />
@@ -806,6 +818,7 @@ export default function App() {
   const [activeWorkout, setActiveWorkout] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_REST_SECONDS);
   const [timerActive, setTimerActive] = useState(false);
+  const [timerEndsAt, setTimerEndsAt] = useState(null);
   const [confettiBursts, setConfettiBursts] = useState([]);
 
   useEffect(() => {
@@ -813,23 +826,36 @@ export default function App() {
   }, [workouts]);
 
   useEffect(() => {
-    if (!timerActive) return undefined;
+    if (!timerActive || !timerEndsAt) return undefined;
+
+    const syncTimer = () => {
+      const remainingSeconds = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+      if (remainingSeconds <= 0) {
+        setTimerActive(false);
+        setTimerEndsAt(null);
+        setSecondsLeft(DEFAULT_REST_SECONDS);
+        return;
+      }
+      setSecondsLeft(remainingSeconds);
+    };
+
+    syncTimer();
     const interval = window.setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          setTimerActive(false);
-          return DEFAULT_REST_SECONDS;
-        }
-        return current - 1;
-      });
+      syncTimer();
     }, 1000);
-    return () => window.clearInterval(interval);
-  }, [timerActive]);
+
+    document.addEventListener('visibilitychange', syncTimer);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', syncTimer);
+    };
+  }, [timerActive, timerEndsAt]);
 
   const startWorkout = (type, customName = '') => {
     setActiveWorkout(createWorkout(type, customName, workouts));
     setTab('Workout');
     setTimerActive(false);
+    setTimerEndsAt(null);
     setSecondsLeft(DEFAULT_REST_SECONDS);
   };
 
@@ -838,6 +864,7 @@ export default function App() {
     setWorkouts((current) => [activeWorkout, ...current]);
     setActiveWorkout(null);
     setTimerActive(false);
+    setTimerEndsAt(null);
     setSecondsLeft(DEFAULT_REST_SECONDS);
     setTab('History');
   };
@@ -869,6 +896,9 @@ export default function App() {
       })),
     });
     setTab('Workout');
+    setTimerActive(false);
+    setTimerEndsAt(null);
+    setSecondsLeft(DEFAULT_REST_SECONDS);
   };
 
   const deleteWorkout = (workoutId) => {
@@ -893,6 +923,9 @@ export default function App() {
     if (!window.confirm('Delete all saved workouts from this device? This cannot be undone unless you exported a backup first.')) return;
     setWorkouts([]);
     setActiveWorkout(null);
+    setTimerActive(false);
+    setTimerEndsAt(null);
+    setSecondsLeft(DEFAULT_REST_SECONDS);
     localStorage.removeItem(STORAGE_KEY);
     setTab('Workout');
   };
@@ -909,7 +942,9 @@ export default function App() {
           secondsLeft={secondsLeft}
           onCelebrate={celebrateSet}
           onResetTimer={() => {
+            const nextEnd = Date.now() + DEFAULT_REST_SECONDS * 1000;
             setSecondsLeft(DEFAULT_REST_SECONDS);
+            setTimerEndsAt(nextEnd);
             setTimerActive(true);
           }}
         />

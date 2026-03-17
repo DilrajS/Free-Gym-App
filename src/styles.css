@@ -381,6 +381,11 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 .input-with-history::placeholder {
   color: #5f6872;
 }
+.last-edited-input {
+  border-color: rgba(92, 214, 141, 0.95);
+  box-shadow: 0 0 0 4px rgba(92, 214, 141, 0.14);
+  background: rgba(92, 214, 141, 0.06);
+}
 .add-exercise-card { display: grid; gap: 14px; padding: 16px; }
 .add-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
