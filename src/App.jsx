@@ -9,6 +9,7 @@ import {
   Dumbbell,
   FileArchive,
   FileUp,
+  History,
   Plus,
   SquarePen,
   Trash2,
