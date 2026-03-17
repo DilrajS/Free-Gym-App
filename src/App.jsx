@@ -597,7 +597,7 @@ function ActiveWorkoutScreen({
   );
 }
 
-function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout }) {
+function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExercise }) {
   const [expanded, setExpanded] = useState(null);
   const [swipedId, setSwipedId] = useState(null);
   const touchStartX = useRef(0);
@@ -644,31 +644,41 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout }) {
               onTouchEnd={(event) => handleTouchEnd(event, workout.id)}
             >
               <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
-              <div>
-                <strong>{formatShortDate(workout.date)} - {workout.label}</strong>
-                <p className="history-time">
-                  {workout.type}
-                  {formatTime(workout.startedAt) ? ` • ${formatTime(workout.startedAt)}` : ''}
-                </p>
-                <p className="history-meta">
-                  {workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' • ')}
-                </p>
-              </div>
-              <span>{isOpen ? '-' : '+'}</span>
+                <div>
+                  <strong>{formatShortDate(workout.date)} - {workout.label}</strong>
+                  <p className="history-time">
+                    {workout.type}
+                    {formatTime(workout.startedAt) ? ` • ${formatTime(workout.startedAt)}` : ''}
+                  </p>
+                  <p className="history-meta">
+                    {workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' • ')}
+                  </p>
+                </div>
+                <span>{isOpen ? '-' : '+'}</span>
               </button>
               {isOpen ? (
                 <div className="history-details">
-                {workout.exercises.map((exercise) => (
-                  <div key={exercise.id} className="history-exercise">
-                    <h3>{exercise.name || 'Untitled Exercise'}</h3>
-                    <p>
-                      {exercise.sets
-                        .filter((set) => set.weight !== '' && set.reps !== '')
-                        .map(formatSetSummary)
-                        .join(', ') || 'No completed sets'}
-                    </p>
-                  </div>
-                ))}
+                  {workout.exercises.map((exercise) => (
+                    <div key={exercise.id} className="history-exercise">
+                      <div className="history-exercise-head">
+                        <h3>{exercise.name || 'Untitled Exercise'}</h3>
+                        <button
+                          type="button"
+                          className="mini-icon-button"
+                          aria-label={`Rename ${exercise.name || 'exercise'}`}
+                          onClick={() => onRenameExercise(exercise.name)}
+                        >
+                          <SquarePen size={15} strokeWidth={2.2} />
+                        </button>
+                      </div>
+                      <p>
+                        {exercise.sets
+                          .filter((set) => set.weight !== '' && set.reps !== '')
+                          .map(formatSetSummary)
+                          .join(', ') || 'No completed sets'}
+                      </p>
+                    </div>
+                  ))}
                   <button type="button" className="text-link danger-link" onClick={() => onOpenWorkout(workout.id)}>
                     Copy into a new workout
                   </button>
@@ -905,6 +915,33 @@ export default function App() {
     setWorkouts((current) => current.filter((workout) => workout.id !== workoutId));
   };
 
+  const renameExerciseEverywhere = (previousName) => {
+    const oldName = String(previousName || '').trim();
+    if (!oldName) return;
+
+    const nextName = window.prompt(`Rename "${oldName}" to:`, oldName)?.trim();
+    if (!nextName || nextName === oldName) return;
+
+    const applyRename = (exercise) =>
+      normalizeName(exercise.name) === normalizeName(oldName) ? { ...exercise, name: nextName } : exercise;
+
+    setWorkouts((current) =>
+      current.map((workout) => ({
+        ...workout,
+        exercises: workout.exercises.map(applyRename),
+      })),
+    );
+
+    setActiveWorkout((current) =>
+      current
+        ? {
+            ...current,
+            exercises: current.exercises.map(applyRename),
+          }
+        : current,
+    );
+  };
+
   const celebrateSet = (target) => {
     const rect = target?.getBoundingClientRect?.();
     const burst = {
@@ -952,7 +989,12 @@ export default function App() {
         <ChooseWorkoutScreen onStart={startWorkout} />
       )
     ) : tab === 'History' ? (
-      <HistoryScreen workouts={workouts} onOpenWorkout={copyWorkoutToActive} onDeleteWorkout={deleteWorkout} />
+      <HistoryScreen
+        workouts={workouts}
+        onOpenWorkout={copyWorkoutToActive}
+        onDeleteWorkout={deleteWorkout}
+        onRenameExercise={renameExerciseEverywhere}
+      />
     ) : tab === 'Charts' ? (
       <ChartsScreen workouts={workouts} />
     ) : (

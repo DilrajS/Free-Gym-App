@@ -445,6 +445,12 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   color: var(--muted);
 }
 .history-details { display: grid; gap: 14px; padding: 0 18px 18px; }
+.history-exercise-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .history-exercise h3 { font-size: 1rem; margin-bottom: 4px; }
 .history-exercise p, .backup-card p { color: var(--muted); line-height: 1.5; }
 .backup-card {
