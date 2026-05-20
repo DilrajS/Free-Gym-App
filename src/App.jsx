@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowDown,
+  ArrowDownLeft,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
@@ -17,8 +18,9 @@ import {
   FileUp,
   Flame,
   History,
-  Layers,
   ListFilter,
+  MoveHorizontal,
+  Footprints,
   Play,
   Plus,
   Save,
@@ -28,23 +30,28 @@ import {
   Trash2,
   TrendingUp,
   Users,
+  Target,
   X,
-  Zap,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'gym-log-v2';
 const ACTIVE_WORKOUT_KEY = `${STORAGE_KEY}-active-workout`;
 const WORKOUT_TEMPLATES_KEY = `${STORAGE_KEY}-templates`;
 const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Backup'];
-const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Lower', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
-const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Lower', 'Legs', 'Full Body', 'Core', 'Cardio'];
-const CHART_METRICS = [
-  { id: 'maxWeight', label: 'Max weight' },
-  { id: 'estimated1rm', label: 'Est. 1RM' },
-  { id: 'volume', label: 'Volume' },
-  { id: 'sets', label: 'Sets' },
-  { id: 'reps', label: 'Reps' },
-];
+const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
+const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
+const CHART_METRIC_DEFINITIONS = {
+  sessions: { id: 'sessions', label: 'Sessions' },
+  maxWeight: { id: 'maxWeight', label: 'Max weight' },
+  estimated1rm: { id: 'estimated1rm', label: 'Estimated 1RM' },
+  volume: { id: 'volume', label: 'Volume' },
+  sets: { id: 'sets', label: 'Sets' },
+  reps: { id: 'reps', label: 'Reps' },
+  distance: { id: 'distance', label: 'Distance' },
+  totalTime: { id: 'totalTime', label: 'Time' },
+  bestTime: { id: 'bestTime', label: 'Best time' },
+  pace: { id: 'pace', label: 'Pace' },
+};
 const DATE_RANGES = [
   { id: '7', label: '7D', days: 7 },
   { id: '30', label: '30D', days: 30 },
@@ -55,7 +62,6 @@ const TEMPLATES = {
   Upper: ['Bench Press', 'Barbell Row', 'Shoulder Press', 'Lat Pulldown', 'Bicep Curl'],
   Push: ['Bench Press', 'Incline DB Press', 'Shoulder Press', 'Lateral Raise', 'Tricep Pushdown'],
   Pull: ['Lat Pulldown', 'Barbell Row', 'Seated Cable Row', 'Hammer Curl', 'Face Pull'],
-  Lower: ['Back Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl', 'Calf Raise'],
   Legs: ['Back Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Extension', 'Standing Calf Raise'],
   'Full Body': ['Back Squat', 'Bench Press', 'Deadlift', 'Pull Up', 'Farmer Carry'],
   Core: ['Plank', 'Cable Crunch', 'Hanging Knee Raise', 'Dead Bug', 'Pallof Press'],
@@ -63,7 +69,6 @@ const TEMPLATES = {
 };
 const DEFAULT_REST_SECONDS = 120;
 const HISTORY_PAGE_SIZE = 12;
-const AUTOSAVE_DELAY_MS = 450;
 
 const EXERCISE_LIBRARY = [
   { name: 'Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
@@ -87,14 +92,14 @@ const EXERCISE_LIBRARY = [
   { name: 'Tricep Pushdown', muscle: 'Triceps', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Overhead Tricep Extension', muscle: 'Triceps', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Dips', muscle: 'Triceps', type: 'Push', equipment: 'Bodyweight', tracking: 'bodyweight' },
-  { name: 'Back Squat', muscle: 'Quads', type: 'Lower', equipment: 'Barbell', tracking: 'weight/reps' },
-  { name: 'Front Squat', muscle: 'Quads', type: 'Lower', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Back Squat', muscle: 'Quads', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Front Squat', muscle: 'Quads', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Leg Press', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Leg Extension', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
-  { name: 'Romanian Deadlift', muscle: 'Hamstrings', type: 'Lower', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Romanian Deadlift', muscle: 'Hamstrings', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Leg Curl', muscle: 'Hamstrings', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
-  { name: 'Hip Thrust', muscle: 'Glutes', type: 'Lower', equipment: 'Barbell', tracking: 'weight/reps' },
-  { name: 'Cable Kickback', muscle: 'Glutes', type: 'Lower', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Hip Thrust', muscle: 'Glutes', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Cable Kickback', muscle: 'Glutes', type: 'Legs', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Standing Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Seated Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Plank', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'time' },
@@ -109,15 +114,25 @@ const EXERCISE_LIBRARY = [
 ];
 
 const CATEGORY_ICONS = {
-  Push: ArrowUp,
-  Pull: ArrowDown,
+  Push: Target,
+  Pull: ArrowDownLeft,
   Upper: Users,
-  Lower: Layers,
-  Legs: Zap,
+  Legs: Footprints,
+  'Full Body': MoveHorizontal,
   Core: Shield,
   Cardio: Bike,
-  'Full Body': Dumbbell,
   Custom: SquarePen,
+};
+
+const CATEGORY_BADGES = {
+  Push: 'push',
+  Pull: 'pull',
+  Upper: 'upper',
+  Legs: 'legs',
+  'Full Body': 'full-body',
+  Core: 'core',
+  Cardio: 'cardio',
+  Custom: 'custom',
 };
 
 function createId() {
@@ -161,14 +176,168 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-function createSet(previousSet = {}) {
+function normalizeWorkoutType(type) {
+  const value = String(type || '').trim();
+  if (!value) return 'Custom';
+  return value === 'Lower' ? 'Legs' : value;
+}
+
+function normalizeTracking(tracking) {
+  const value = String(tracking || '').trim();
+  return ['weight/reps', 'bodyweight', 'time', 'distance/time'].includes(value) ? value : 'weight/reps';
+}
+
+function formatNumber(value, fractionDigits = 0) {
+  if (!Number.isFinite(value)) return '';
+  return value.toLocaleString(undefined, { maximumFractionDigits: fractionDigits });
+}
+
+function parseNumericValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDurationSeconds(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/^\d+:\d{1,2}(:\d{1,2})?$/.test(text)) {
+    const parts = text.split(':').map(Number);
+    return parts.reduce((total, part) => total * 60 + part, 0);
+  }
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const wholeSeconds = Math.round(seconds);
+  const hours = Math.floor(wholeSeconds / 3600);
+  const minutes = Math.floor((wholeSeconds % 3600) / 60);
+  const secs = wholeSeconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function formatDistance(value) {
+  const numeric = parseNumericValue(value);
+  if (!Number.isFinite(numeric)) return '';
+  return formatNumber(numeric, numeric % 1 === 0 ? 0 : 2);
+}
+
+function getTrackingConfig(tracking) {
+  const normalizedTracking = normalizeTracking(tracking);
+  if (normalizedTracking === 'bodyweight') {
+    return {
+      tracking: normalizedTracking,
+      metricIds: ['sessions', 'sets', 'reps'],
+      fields: [{ key: 'reps', label: 'Reps', placeholder: '8', inputMode: 'numeric', type: 'number', previousKey: 'previousReps' }],
+    };
+  }
+  if (normalizedTracking === 'time') {
+    return {
+      tracking: normalizedTracking,
+      metricIds: ['sessions', 'bestTime', 'totalTime'],
+      fields: [{ key: 'duration', label: 'Time', placeholder: '0:45', inputMode: 'text', type: 'text', previousKey: 'previousDuration' }],
+    };
+  }
+  if (normalizedTracking === 'distance/time') {
+    return {
+      tracking: normalizedTracking,
+      metricIds: ['sessions', 'distance', 'totalTime', 'pace'],
+      fields: [
+        { key: 'distance', label: 'Distance', placeholder: '1.5', inputMode: 'decimal', type: 'number', previousKey: 'previousDistance' },
+        { key: 'duration', label: 'Time', placeholder: '15:00', inputMode: 'text', type: 'text', previousKey: 'previousDuration' },
+      ],
+    };
+  }
+  return {
+    tracking: 'weight/reps',
+    metricIds: ['sessions', 'maxWeight', 'estimated1rm', 'volume', 'reps', 'sets'],
+    fields: [
+      { key: 'weight', label: 'Weight', placeholder: '135', inputMode: 'decimal', type: 'number', previousKey: 'previousWeight' },
+      { key: 'reps', label: 'Reps', placeholder: '8', inputMode: 'numeric', type: 'number', previousKey: 'previousReps' },
+    ],
+  };
+}
+
+function formatTrackingLabel(tracking) {
+  const normalizedTracking = normalizeTracking(tracking);
+  if (normalizedTracking === 'distance/time') return 'Distance + time';
+  if (normalizedTracking === 'weight/reps') return 'Weight + reps';
+  if (normalizedTracking === 'bodyweight') return 'Bodyweight';
+  return 'Time';
+}
+
+function createSetForTracking(tracking, previousSet = {}) {
   return {
     id: createId(),
     weight: '',
     reps: '',
+    distance: '',
+    duration: '',
     previousWeight: previousSet.weight ?? '',
     previousReps: previousSet.reps ?? '',
+    previousDistance: previousSet.distance ?? '',
+    previousDuration: previousSet.duration ?? '',
   };
+}
+
+function normalizeSet(set = {}, tracking = 'weight/reps') {
+  const normalizedTracking = normalizeTracking(tracking);
+  const nextSet = {
+    id: set.id || createId(),
+    weight: set.weight ?? '',
+    reps: set.reps ?? '',
+    distance: set.distance ?? '',
+    duration: set.duration ?? '',
+    previousWeight: set.previousWeight ?? '',
+    previousReps: set.previousReps ?? '',
+    previousDistance: set.previousDistance ?? '',
+    previousDuration: set.previousDuration ?? '',
+  };
+
+  if (normalizedTracking === 'time' && !nextSet.duration && nextSet.reps !== '') nextSet.duration = String(nextSet.reps);
+  if (normalizedTracking === 'distance/time' && !nextSet.distance && nextSet.weight !== '') nextSet.distance = String(nextSet.weight);
+  if (normalizedTracking === 'distance/time' && !nextSet.duration && nextSet.reps !== '') nextSet.duration = String(nextSet.reps);
+  return nextSet;
+}
+
+function isSetComplete(set, tracking) {
+  const normalizedTracking = normalizeTracking(tracking);
+  if (normalizedTracking === 'bodyweight') return Number.isFinite(parseNumericValue(set.reps)) && parseNumericValue(set.reps) > 0;
+  if (normalizedTracking === 'time') return Number.isFinite(parseDurationSeconds(set.duration)) && parseDurationSeconds(set.duration) > 0;
+  if (normalizedTracking === 'distance/time') {
+    return Number.isFinite(parseNumericValue(set.distance)) && parseNumericValue(set.distance) > 0
+      && Number.isFinite(parseDurationSeconds(set.duration)) && parseDurationSeconds(set.duration) > 0;
+  }
+  return Number.isFinite(parseNumericValue(set.weight)) && parseNumericValue(set.weight) > 0
+    && Number.isFinite(parseNumericValue(set.reps)) && parseNumericValue(set.reps) > 0;
+}
+
+function formatPace(distanceValue, durationValue) {
+  const distance = parseNumericValue(distanceValue);
+  const duration = parseDurationSeconds(durationValue);
+  if (!Number.isFinite(distance) || distance <= 0 || !Number.isFinite(duration) || duration <= 0) return '';
+  return `${formatDuration(duration / distance)}/mi`;
+}
+
+function formatSetSummary(set, tracking = 'weight/reps') {
+  const normalizedTracking = normalizeTracking(tracking);
+  if (!isSetComplete(set, normalizedTracking)) return '';
+  if (normalizedTracking === 'bodyweight') {
+    const addedWeight = parseNumericValue(set.weight);
+    return addedWeight && addedWeight > 0
+      ? `${formatNumber(parseNumericValue(set.reps))} reps (+${formatNumber(addedWeight, addedWeight % 1 === 0 ? 0 : 2)} lb)`
+      : `${formatNumber(parseNumericValue(set.reps))} reps`;
+  }
+  if (normalizedTracking === 'time') return formatDuration(parseDurationSeconds(set.duration));
+  if (normalizedTracking === 'distance/time') {
+    const distanceText = formatDistance(set.distance);
+    const durationText = formatDuration(parseDurationSeconds(set.duration));
+    const paceText = formatPace(set.distance, set.duration);
+    return paceText ? `${distanceText} mi / ${durationText}, Pace ${paceText}` : `${distanceText} mi / ${durationText}`;
+  }
+  return `${formatDistance(set.weight)} lb x ${formatNumber(parseNumericValue(set.reps))}`;
 }
 
 function getExerciseMeta(name) {
@@ -176,29 +345,87 @@ function getExerciseMeta(name) {
   return EXERCISE_LIBRARY.find((exercise) => normalizeName(exercise.name) === normalized) || null;
 }
 
+function normalizeExercise(exercise = {}) {
+  const meta = getExerciseMeta(exercise.name);
+  const tracking = normalizeTracking(exercise.tracking || meta?.tracking || 'weight/reps');
+  const normalizedSets = Array.isArray(exercise.sets)
+    ? exercise.sets.map((set) => normalizeSet(set, tracking))
+    : [];
+
+  return {
+    id: exercise.id || createId(),
+    name: exercise.name || '',
+    muscle: exercise.muscle || meta?.muscle || '',
+    type: normalizeWorkoutType(exercise.type || meta?.type || ''),
+    equipment: exercise.equipment || meta?.equipment || '',
+    tracking,
+    sets: normalizedSets.length ? normalizedSets : [createSetForTracking(tracking)],
+  };
+}
+
 function createExercise(name = '', previousSets = []) {
   const populatedSets = previousSets
-    .filter((set) => set.weight !== '' || set.reps !== '')
-    .map((set) => createSet(set));
+    .filter((set) => Object.values(set || {}).some((value) => value !== '' && value !== null && value !== undefined))
+    .map((set) => set);
 
   const meta = getExerciseMeta(name);
-  return {
-    id: createId(),
+  const tracking = normalizeTracking(meta?.tracking || 'weight/reps');
+  return normalizeExercise({
     name,
     muscle: meta?.muscle || '',
-    type: meta?.type || '',
+    type: normalizeWorkoutType(meta?.type || ''),
     equipment: meta?.equipment || '',
-    tracking: meta?.tracking || 'weight/reps',
-    sets: populatedSets.length ? populatedSets : [createSet()],
+    tracking,
+    sets: populatedSets.length
+      ? populatedSets.map((set) => createSetForTracking(tracking, normalizeSet(set, tracking)))
+      : [createSetForTracking(tracking)],
+  });
+}
+
+function normalizeWorkout(workout = {}) {
+  const normalizedType = normalizeWorkoutType(workout.type);
+  const normalizedLabel = workout.label === 'Lower' ? 'Legs' : workout.label || normalizedType;
+  return {
+    ...workout,
+    id: workout.id || createId(),
+    date: workout.date || todayValue(),
+    startedAt: workout.startedAt || nowValue(),
+    type: normalizedType,
+    label: normalizedLabel,
+    notes: workout.notes || '',
+    exercises: Array.isArray(workout.exercises) ? workout.exercises.map((exercise) => normalizeExercise(exercise)) : [createExercise()],
+  };
+}
+
+function normalizeTemplate(template = {}) {
+  return {
+    ...template,
+    id: template.id || createId(),
+    name: String(template.name || '').trim() || 'Workout Template',
+    type: normalizeWorkoutType(template.type),
+    label: template.label === 'Lower' ? 'Legs' : template.label || template.name || 'Workout Template',
+    notes: template.notes || '',
+    createdAt: template.createdAt || nowValue(),
+    lastUsedAt: template.lastUsedAt || null,
+    exercises: Array.isArray(template.exercises)
+      ? template.exercises.map((exercise) => {
+          const normalizedExercise = normalizeExercise(exercise);
+          return {
+            ...normalizedExercise,
+            setCount: Math.max(exercise.setCount || normalizedExercise.sets.length || 1, 1),
+          };
+        })
+      : [],
   };
 }
 
 function getTemplateForType(type, workouts) {
-  if (type === 'Custom') return [{ name: 'Exercise 1', sets: [] }];
+  const normalizedType = normalizeWorkoutType(type);
+  if (normalizedType === 'Custom') return [{ name: 'Exercise 1', sets: [] }];
 
   const lastWorkoutOfType = [...workouts]
     .sort((a, b) => new Date(b.startedAt || b.date) - new Date(a.startedAt || a.date))
-    .find((workout) => workout.type === type);
+    .find((workout) => normalizeWorkoutType(workout.type) === normalizedType);
 
   if (lastWorkoutOfType?.exercises?.length) {
     const savedExercises = lastWorkoutOfType.exercises
@@ -211,22 +438,22 @@ function getTemplateForType(type, workouts) {
     if (savedExercises.length) return savedExercises;
   }
 
-  return (TEMPLATES[type] || []).map((name) => ({ name, sets: [] }));
+  return (TEMPLATES[normalizedType] || []).map((name) => ({ name, sets: [] }));
 }
 
 function createWorkout(type, customTitle = '', workouts = []) {
-  const label = type === 'Custom' ? (customTitle.trim() || 'Custom Workout') : type;
-  const template = getTemplateForType(type, workouts);
-
-  return {
+  const normalizedType = normalizeWorkoutType(type);
+  const label = normalizedType === 'Custom' ? (customTitle.trim() || 'Custom Workout') : normalizedType;
+  const template = getTemplateForType(normalizedType, workouts);
+  return normalizeWorkout({
     id: createId(),
     date: todayValue(),
     startedAt: nowValue(),
-    type,
+    type: normalizedType,
     label,
     notes: '',
     exercises: template.map((exercise) => createExercise(exercise.name, exercise.sets)),
-  };
+  });
 }
 
 function readData() {
@@ -234,14 +461,19 @@ function readData() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { workouts: [] };
     const parsed = JSON.parse(raw);
-    return { workouts: Array.isArray(parsed.workouts) ? parsed.workouts : [] };
+    return { workouts: Array.isArray(parsed.workouts) ? parsed.workouts.map((workout) => normalizeWorkout(workout)) : [] };
   } catch {
     return { workouts: [] };
   }
 }
 
 function saveData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      workouts: Array.isArray(data?.workouts) ? data.workouts.map((workout) => normalizeWorkout(workout)) : [],
+    }),
+  );
 }
 
 function readActiveWorkout() {
@@ -249,7 +481,7 @@ function readActiveWorkout() {
     const raw = localStorage.getItem(ACTIVE_WORKOUT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && parsed.id && Array.isArray(parsed.exercises) ? parsed : null;
+    return parsed && parsed.id && Array.isArray(parsed.exercises) ? normalizeWorkout(parsed) : null;
   } catch {
     return null;
   }
@@ -260,7 +492,7 @@ function saveActiveWorkout(workout) {
     localStorage.removeItem(ACTIVE_WORKOUT_KEY);
     return;
   }
-  localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ ...workout, updatedAt: nowValue() }));
+  localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ ...normalizeWorkout(workout), updatedAt: nowValue() }));
 }
 
 function readTemplates() {
@@ -268,14 +500,17 @@ function readTemplates() {
     const raw = localStorage.getItem(WORKOUT_TEMPLATES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((template) => template?.id && template?.name) : [];
+    return Array.isArray(parsed) ? parsed.filter((template) => template?.id && template?.name).map((template) => normalizeTemplate(template)) : [];
   } catch {
     return [];
   }
 }
 
 function saveTemplates(templates) {
-  localStorage.setItem(WORKOUT_TEMPLATES_KEY, JSON.stringify(Array.isArray(templates) ? templates : []));
+  localStorage.setItem(
+    WORKOUT_TEMPLATES_KEY,
+    JSON.stringify(Array.isArray(templates) ? templates.map((template) => normalizeTemplate(template)) : []),
+  );
 }
 
 function hasWorkoutContent(workout) {
@@ -284,7 +519,7 @@ function hasWorkoutContent(workout) {
   return (workout.exercises || []).some(
     (exercise) =>
       String(exercise.name || '').trim() ||
-      (exercise.sets || []).some((set) => set.weight !== '' || set.reps !== ''),
+      (exercise.sets || []).some((set) => ['weight', 'reps', 'distance', 'duration'].some((key) => String(set?.[key] ?? '').trim())),
   );
 }
 
@@ -293,10 +528,10 @@ function hasTemplateExercises(workout) {
 }
 
 function createTemplateFromWorkout(workout, name) {
-  return {
+  return normalizeTemplate({
     id: createId(),
     name: name.trim(),
-    type: workout.type || 'Custom',
+    type: normalizeWorkoutType(workout.type || 'Custom'),
     label: workout.label || name.trim(),
     notes: workout.notes || '',
     createdAt: nowValue(),
@@ -307,38 +542,38 @@ function createTemplateFromWorkout(workout, name) {
         id: createId(),
         name: exercise.name,
         muscle: exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '',
-        type: exercise.type || getExerciseMeta(exercise.name)?.type || '',
+        type: normalizeWorkoutType(exercise.type || getExerciseMeta(exercise.name)?.type || ''),
         equipment: exercise.equipment || getExerciseMeta(exercise.name)?.equipment || '',
-        tracking: exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps',
+        tracking: normalizeTracking(exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps'),
         setCount: Math.max((exercise.sets || []).length, 1),
-        sets: Array.from({ length: Math.max((exercise.sets || []).length, 1) }, () => ({ weight: '', reps: '' })),
+        sets: (exercise.sets || []).map((set) => normalizeSet(set, exercise.tracking)),
       })),
-  };
+  });
 }
 
 function createWorkoutFromTemplate(template) {
-  return {
+  const normalizedTemplate = normalizeTemplate(template);
+  return normalizeWorkout({
     id: createId(),
     date: todayValue(),
     startedAt: nowValue(),
-    type: template.type || 'Custom',
-    label: template.name || template.label || 'Template Workout',
-    notes: template.notes || '',
-    templateId: template.id,
-    exercises: (template.exercises || []).map((exercise) => ({
+    type: normalizedTemplate.type || 'Custom',
+    label: normalizedTemplate.name || normalizedTemplate.label || 'Template Workout',
+    notes: normalizedTemplate.notes || '',
+    templateId: normalizedTemplate.id,
+    exercises: (normalizedTemplate.exercises || []).map((exercise) => ({
       id: createId(),
       name: exercise.name || '',
       muscle: exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '',
-      type: exercise.type || getExerciseMeta(exercise.name)?.type || '',
+      type: normalizeWorkoutType(exercise.type || getExerciseMeta(exercise.name)?.type || ''),
       equipment: exercise.equipment || getExerciseMeta(exercise.name)?.equipment || '',
-      tracking: exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps',
-      sets: Array.from({ length: Math.max((exercise.sets || []).length || exercise.setCount || 1, 1) }, () => createSet()),
+      tracking: normalizeTracking(exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps'),
+      sets: Array.from(
+        { length: Math.max((exercise.sets || []).length || exercise.setCount || 1, 1) },
+        (_, index) => createSetForTracking(exercise.tracking, exercise.sets?.[index]),
+      ),
     })),
-  };
-}
-
-function formatSetSummary(set) {
-  return `${set.weight}x${set.reps}`;
+  });
 }
 
 function findLastExercise(workouts, currentWorkoutId, exerciseName) {
@@ -352,9 +587,9 @@ function findLastExercise(workouts, currentWorkoutId, exerciseName) {
   for (const workout of prior) {
     for (const exercise of workout.exercises || []) {
       if (normalizeName(exercise.name) === normalized) {
-        const completeSets = (exercise.sets || []).filter((set) => set.weight !== '' && set.reps !== '');
+        const completeSets = (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking));
         if (!completeSets.length) return null;
-        return completeSets.map(formatSetSummary).join(', ');
+        return completeSets.map((set) => formatSetSummary(set, exercise.tracking)).join(', ');
       }
     }
   }
@@ -376,13 +611,14 @@ function collectExerciseNames(workouts, activeWorkout) {
 }
 
 function getExerciseOptions(workouts, activeWorkout, category = 'All') {
-  const library = EXERCISE_LIBRARY.filter((exercise) => category === 'All' || exercise.type === category);
+  const normalizedCategory = normalizeWorkoutType(category);
+  const library = EXERCISE_LIBRARY.filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
   const used = collectExerciseNames(workouts, activeWorkout)
     .map((name) => getExerciseMeta(name) || { name, muscle: 'Custom', type: 'Custom', equipment: 'Custom', tracking: 'weight/reps' })
-    .filter((exercise) => category === 'All' || exercise.type === category);
+    .filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
   const byName = new Map([...library, ...used].map((exercise) => [normalizeName(exercise.name), exercise]));
   return [...byName.values()].sort((a, b) => {
-    const typeSort = CATEGORY_ORDER.indexOf(a.type) - CATEGORY_ORDER.indexOf(b.type);
+    const typeSort = CATEGORY_ORDER.indexOf(normalizeWorkoutType(a.type)) - CATEGORY_ORDER.indexOf(normalizeWorkoutType(b.type));
     return typeSort || a.muscle.localeCompare(b.muscle) || a.name.localeCompare(b.name);
   });
 }
@@ -406,22 +642,42 @@ function estimateOneRepMax(weight, reps) {
 }
 
 function summarizeExercise(exercise) {
+  const tracking = normalizeTracking(exercise.tracking);
   return (exercise.sets || []).reduce(
     (summary, set) => {
-      const weight = Number(set.weight);
-      const reps = Number(set.reps);
-      const hasWeight = Number.isFinite(weight) && weight > 0;
-      const hasReps = Number.isFinite(reps) && reps > 0;
-      if (!hasWeight && !hasReps) return summary;
+      if (!isSetComplete(set, tracking)) return summary;
+      const weight = parseNumericValue(set.weight);
+      const reps = parseNumericValue(set.reps);
+      const distance = parseNumericValue(set.distance);
+      const duration = parseDurationSeconds(set.duration);
       summary.sets += 1;
-      summary.reps += hasReps ? reps : 0;
-      summary.volume += hasWeight && hasReps ? weight * reps : 0;
-      summary.maxWeight = Math.max(summary.maxWeight, hasWeight ? weight : 0);
-      summary.estimated1rm = Math.max(summary.estimated1rm, hasWeight && hasReps ? estimateOneRepMax(weight, reps) : 0);
+      if (tracking === 'weight/reps') {
+        summary.reps += reps || 0;
+        summary.volume += weight && reps ? weight * reps : 0;
+        summary.maxWeight = Math.max(summary.maxWeight, weight || 0);
+        summary.estimated1rm = Math.max(summary.estimated1rm, weight && reps ? estimateOneRepMax(weight, reps) : 0);
+      }
+      if (tracking === 'bodyweight') summary.reps += reps || 0;
+      if (tracking === 'time') {
+        summary.totalTime += duration || 0;
+        summary.bestTime = Math.max(summary.bestTime, duration || 0);
+      }
+      if (tracking === 'distance/time') {
+        summary.distance += distance || 0;
+        summary.totalTime += duration || 0;
+      }
       return summary;
     },
-    { maxWeight: 0, estimated1rm: 0, volume: 0, sets: 0, reps: 0 },
+    { maxWeight: 0, estimated1rm: 0, volume: 0, sets: 0, reps: 0, distance: 0, totalTime: 0, bestTime: 0 },
   );
+}
+
+function getMetricValueFromSummary(summary, metric) {
+  if (metric === 'pace') {
+    return summary.distance > 0 && summary.totalTime > 0 ? summary.totalTime / summary.distance : 0;
+  }
+  if (metric === 'sessions') return summary.sets > 0 || summary.distance > 0 || summary.totalTime > 0 ? 1 : 0;
+  return summary[metric] || 0;
 }
 
 function calculateExerciseRecords(workouts) {
@@ -443,7 +699,8 @@ function calculateExerciseRecords(workouts) {
   return records;
 }
 
-function getCurrentSetPrs(set, exerciseRecords) {
+function getCurrentSetPrs(set, exerciseRecords, tracking = 'weight/reps') {
+  if (normalizeTracking(tracking) !== 'weight/reps') return [];
   const weight = Number(set.weight);
   const reps = Number(set.reps);
   const hasWeight = Number.isFinite(weight) && weight > 0;
@@ -455,7 +712,7 @@ function getCurrentSetPrs(set, exerciseRecords) {
   // Epley estimate: weight * (1 + reps / 30). Good enough for lightweight PR hints.
   const estimated1rm = hasWeight && hasReps ? estimateOneRepMax(weight, reps) : 0;
   if (hasWeight && weight > exerciseRecords.maxWeight) prs.push('Max weight PR');
-  if (estimated1rm && estimated1rm > exerciseRecords.estimated1rm) prs.push('Est. 1RM PR');
+  if (estimated1rm && estimated1rm > exerciseRecords.estimated1rm) prs.push('Estimated 1RM PR');
   if (volume && volume > exerciseRecords.bestVolume) prs.push('Volume PR');
   if (hasReps && reps > exerciseRecords.bestReps) prs.push('Rep PR');
   return prs;
@@ -469,32 +726,66 @@ function getLastPerformanceMap(workouts) {
       (workout.exercises || []).forEach((exercise) => {
         const normalized = normalizeName(exercise.name);
         if (!normalized || map.has(normalized)) return;
-        const completeSets = (exercise.sets || []).filter((set) => set.weight !== '' && set.reps !== '');
-        if (completeSets.length) map.set(normalized, completeSets.map(formatSetSummary).join(', '));
+        const completeSets = (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking));
+        if (completeSets.length) map.set(normalized, completeSets.map((set) => formatSetSummary(set, exercise.tracking)).join(', '));
       });
     });
   return map;
+}
+
+function getAvailableChartMetrics(workouts, category, exerciseName) {
+  if (exerciseName) {
+    const exercise = getExerciseOptions(workouts, null, category === 'All' ? 'All' : normalizeWorkoutType(category))
+      .find((item) => normalizeName(item.name) === normalizeName(exerciseName));
+    const metricIds = getTrackingConfig(exercise?.tracking || 'weight/reps').metricIds;
+    return metricIds.map((metricId) => CHART_METRIC_DEFINITIONS[metricId]);
+  }
+  if (normalizeWorkoutType(category) === 'Cardio') {
+    return ['sessions', 'distance', 'totalTime', 'pace'].map((metricId) => CHART_METRIC_DEFINITIONS[metricId]);
+  }
+  if (normalizeWorkoutType(category) === 'Core') {
+    return ['sessions', 'sets', 'reps', 'totalTime'].map((metricId) => CHART_METRIC_DEFINITIONS[metricId]);
+  }
+  return ['sessions', 'sets', 'reps', 'volume', 'distance', 'totalTime'].map((metricId) => CHART_METRIC_DEFINITIONS[metricId]);
 }
 
 function getChartSeries(workouts, { category, exerciseName, rangeId, metric }) {
   const startTime = getRangeStart(rangeId);
   const normalized = normalizeName(exerciseName);
   const grouped = new Map();
+  const normalizedCategory = normalizeWorkoutType(category);
 
   workouts
     .filter((workout) => {
       if (startTime && getWorkoutTime(workout) < startTime) return false;
-      if (category !== 'All' && workout.type !== category) return false;
+      if (normalizedCategory !== 'All' && normalizeWorkoutType(workout.type) !== normalizedCategory) return false;
       return true;
     })
     .forEach((workout) => {
-      const daily = grouped.get(workout.date) || { date: workout.date, value: 0 };
-      (workout.exercises || [])
-        .filter((exercise) => !normalized || normalizeName(exercise.name) === normalized)
-        .forEach((exercise) => {
-          const summary = summarizeExercise(exercise);
-          daily.value += summary[metric] || 0;
-        });
+      const daily = grouped.get(workout.date) || { date: workout.date, value: 0, totalDistance: 0, totalTime: 0, sessions: 0 };
+      const matchingExercises = (workout.exercises || []).filter((exercise) => !normalized || normalizeName(exercise.name) === normalized);
+
+      if (metric === 'sessions') {
+        if (matchingExercises.some((exercise) => summarizeExercise(exercise).sets > 0 || summarizeExercise(exercise).distance > 0 || summarizeExercise(exercise).totalTime > 0)) {
+          daily.value += 1;
+        }
+        grouped.set(workout.date, daily);
+        return;
+      }
+
+      matchingExercises.forEach((exercise) => {
+        const summary = summarizeExercise(exercise);
+        const metricValue = getMetricValueFromSummary(summary, metric);
+        if (metric === 'maxWeight' || metric === 'estimated1rm' || metric === 'bestTime') {
+          daily.value = Math.max(daily.value, metricValue);
+        } else if (metric === 'pace') {
+          daily.totalDistance += summary.distance;
+          daily.totalTime += summary.totalTime;
+          daily.value = daily.totalDistance > 0 ? daily.totalTime / daily.totalDistance : 0;
+        } else {
+          daily.value += metricValue;
+        }
+      });
       grouped.set(workout.date, daily);
     });
 
@@ -509,6 +800,21 @@ function getChartSeries(workouts, { category, exerciseName, rangeId, metric }) {
   }
 
   return points;
+}
+
+function getExerciseFieldConfig(exercise, showAddedWeight = false) {
+  const tracking = normalizeTracking(exercise.tracking);
+  const baseConfig = getTrackingConfig(tracking);
+  if (tracking !== 'bodyweight') return baseConfig.fields;
+  if (!showAddedWeight) return baseConfig.fields;
+  return [
+    ...baseConfig.fields,
+    { key: 'weight', label: 'Added wt', placeholder: '25', inputMode: 'decimal', type: 'number', previousKey: 'previousWeight' },
+  ];
+}
+
+function getSetGridStyle(fieldCount) {
+  return { gridTemplateColumns: `40px repeat(${fieldCount}, minmax(0, 1fr)) 34px` };
 }
 
 function ConfettiLayer({ bursts }) {
@@ -564,7 +870,7 @@ function BottomNav({ tab, onChange }) {
   );
 }
 
-function ChooseWorkoutScreen({ onStart }) {
+function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDraft }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const customSheetRef = useRef(null);
@@ -598,12 +904,32 @@ function ChooseWorkoutScreen({ onStart }) {
       </div>
 
       <div className="stack-lg">
+        {draftWorkout ? (
+          <section className="template-card resume-card">
+            <div className="template-copy">
+              <strong>Resume workout</strong>
+              <p>{draftWorkout.label || 'Unfinished workout'}</p>
+              <p className="history-meta">{formatLongDate(draftWorkout.date)}</p>
+            </div>
+            <div className="template-actions">
+              <button type="button" className="primary-button small" onClick={onResumeDraft}>
+                <Play size={16} strokeWidth={2.4} />
+                Resume
+              </button>
+              <button type="button" className="icon-button danger" onClick={onDiscardDraft} aria-label="Discard workout draft">
+                <Trash2 size={16} strokeWidth={2.2} />
+              </button>
+            </div>
+          </section>
+        ) : null}
         {TEMPLATE_ORDER.map((item) => (
           <button key={item} type="button" className="workout-choice" onClick={() => onStart(item)}>
-            {(() => {
-              const Icon = CATEGORY_ICONS[item] || Dumbbell;
-              return <Icon size={24} strokeWidth={2.2} />;
-            })()}
+            <span className={`category-badge ${CATEGORY_BADGES[item] || ''}`}>
+              {(() => {
+                const Icon = CATEGORY_ICONS[item] || Dumbbell;
+                return <Icon size={18} strokeWidth={2.4} />;
+              })()}
+            </span>
             <span>{item}</span>
             <strong>
               <ArrowRight size={24} strokeWidth={2.4} />
@@ -680,7 +1006,8 @@ function ActiveWorkoutScreen({
 }) {
   const [exerciseInput, setExerciseInput] = useState('');
   const [lastEditedFieldId, setLastEditedFieldId] = useState('');
-  const [exerciseFilter, setExerciseFilter] = useState(workout.type === 'Custom' ? 'All' : workout.type);
+  const [bodyweightWeightVisible, setBodyweightWeightVisible] = useState({});
+  const [exerciseFilter, setExerciseFilter] = useState(normalizeWorkoutType(workout.type) === 'Custom' ? 'All' : normalizeWorkoutType(workout.type));
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter),
     [workouts, workout, exerciseFilter],
@@ -697,6 +1024,7 @@ function ActiveWorkoutScreen({
 
   const updateExerciseName = (exerciseId, name) => {
     const meta = getExerciseMeta(name);
+    const nextTracking = normalizeTracking(meta?.tracking || 'weight/reps');
     onUpdate({
       ...workout,
       exercises: workout.exercises.map((exercise) =>
@@ -705,9 +1033,10 @@ function ActiveWorkoutScreen({
               ...exercise,
               name,
               muscle: meta?.muscle || exercise.muscle || '',
-              type: meta?.type || exercise.type || '',
+              type: normalizeWorkoutType(meta?.type || exercise.type || ''),
               equipment: meta?.equipment || exercise.equipment || '',
-              tracking: meta?.tracking || exercise.tracking || 'weight/reps',
+              tracking: nextTracking,
+              sets: exercise.sets.map((set) => normalizeSet(set, nextTracking)),
             }
           : exercise,
       ),
@@ -737,7 +1066,7 @@ function ActiveWorkoutScreen({
         const previous = exercise.sets[exercise.sets.length - 1];
         return {
           ...exercise,
-          sets: [...exercise.sets, createSet(previous)],
+          sets: [...exercise.sets, createSetForTracking(exercise.tracking, previous)],
         };
       }),
     });
@@ -749,7 +1078,7 @@ function ActiveWorkoutScreen({
       exercises: workout.exercises.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
         const nextSets = exercise.sets.filter((set) => set.id !== setId);
-        return { ...exercise, sets: nextSets.length ? nextSets : [{ id: createId(), weight: '', reps: '' }] };
+        return { ...exercise, sets: nextSets.length ? nextSets : [createSetForTracking(exercise.tracking)] };
       }),
     });
   };
@@ -782,10 +1111,10 @@ function ActiveWorkoutScreen({
     });
   };
 
-  const handleRepsBlur = (exerciseId, setId, event) => {
+  const handleSetBlur = (exerciseId, setId, event) => {
     const exercise = workout.exercises.find((item) => item.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
-    if (set && set.weight !== '' && set.reps !== '') {
+    if (exercise && set && isSetComplete(set, exercise.tracking)) {
       onResetTimer();
       onCelebrate?.(event?.target);
     }
@@ -813,6 +1142,11 @@ function ActiveWorkoutScreen({
           const lastTime = lastPerformanceMap.get(normalizeName(exercise.name));
           const meta = getExerciseMeta(exercise.name) || exercise;
           const records = exerciseRecords.get(normalizeName(exercise.name));
+          const showAddedWeight = normalizeTracking(exercise.tracking) === 'bodyweight'
+            && (bodyweightWeightVisible[exercise.id]
+              || exercise.sets.some((set) => String(set.weight || set.previousWeight || '').trim()));
+          const fields = getExerciseFieldConfig(exercise, showAddedWeight);
+          const trackingLabel = formatTrackingLabel(exercise.tracking);
           return (
             <section key={exercise.id} className="exercise-card">
               <div className="exercise-card-top">
@@ -831,11 +1165,11 @@ function ActiveWorkoutScreen({
                     ))}
                   </datalist>
                   <div className="exercise-meta-row">
-                    {[meta.muscle, meta.equipment, meta.tracking].filter(Boolean).map((item) => (
+                    {[meta.muscle, meta.equipment, trackingLabel].filter(Boolean).map((item) => (
                       <span key={item} className="tiny-label">{item}</span>
                     ))}
                   </div>
-                  <p className="last-time">{lastTime ? `Last time: ${lastTime}` : 'No saved history yet.'}</p>
+                  <p className="last-time">{lastTime ? `Last time: ${lastTime}` : 'Last time: no saved workout yet.'}</p>
                 </div>
                 <div className="exercise-actions">
                   <button type="button" className="icon-button" onClick={() => moveExercise(index, -1)} aria-label="Move up">
@@ -850,52 +1184,58 @@ function ActiveWorkoutScreen({
                 </div>
               </div>
 
-              <div className="set-table-header">
+              <div className="set-table-header" style={getSetGridStyle(fields.length)}>
                 <span>Set</span>
-                <span>Weight</span>
-                <span>Reps</span>
+                {fields.map((field) => (
+                  <span key={field.key}>{field.label}</span>
+                ))}
                 <span />
               </div>
+
+              {normalizeTracking(exercise.tracking) === 'bodyweight' && !showAddedWeight ? (
+                <button
+                  type="button"
+                  className="text-link inline-link"
+                  onClick={() => setBodyweightWeightVisible((current) => ({ ...current, [exercise.id]: true }))}
+                >
+                  Track added weight
+                </button>
+              ) : null}
 
               <div className="set-stack">
                 {exercise.sets.map((set, setIndex) => (
                   <div key={set.id} className="set-row-wrap">
-                    <div className="set-row">
+                    <div className="set-row" style={getSetGridStyle(fields.length)}>
                       <span className="set-number">{setIndex + 1}</span>
-                      <input
-                        inputMode="decimal"
-                        type="number"
-                        placeholder={set.previousWeight || '0'}
-                        value={set.weight}
-                        onChange={(event) => updateSet(exercise.id, set.id, 'weight', event.target.value)}
-                        className={[
-                          set.previousWeight !== '' ? 'input-with-history' : '',
-                          lastEditedFieldId === `${exercise.id}-${set.id}-weight` ? 'last-edited-input' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      />
-                      <input
-                        inputMode="numeric"
-                        type="number"
-                        placeholder={set.previousReps || '0'}
-                        value={set.reps}
-                        onChange={(event) => updateSet(exercise.id, set.id, 'reps', event.target.value)}
-                        onBlur={(event) => handleRepsBlur(exercise.id, set.id, event)}
-                        className={[
-                          set.previousReps !== '' ? 'input-with-history' : '',
-                          lastEditedFieldId === `${exercise.id}-${set.id}-reps` ? 'last-edited-input' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      />
+                      {fields.map((field) => (
+                        <label key={field.key} className="set-field">
+                          <span className="sr-only">{field.label}</span>
+                          <input
+                            inputMode={field.inputMode}
+                            type={field.type}
+                            placeholder={set[field.previousKey] || field.placeholder}
+                            value={set[field.key] || ''}
+                            onChange={(event) => updateSet(exercise.id, set.id, field.key, event.target.value)}
+                            onBlur={(event) => handleSetBlur(exercise.id, set.id, event)}
+                            className={[
+                              set[field.previousKey] !== '' ? 'input-with-history' : '',
+                              lastEditedFieldId === `${exercise.id}-${set.id}-${field.key}` ? 'last-edited-input' : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
+                          />
+                        </label>
+                      ))}
                       <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
                         <X size={16} strokeWidth={2.4} />
                       </button>
                     </div>
-                    {getCurrentSetPrs(set, records).length ? (
+                    {normalizeTracking(exercise.tracking) === 'distance/time' && isSetComplete(set, exercise.tracking) ? (
+                      <div className="set-subtext">Pace {formatPace(set.distance, set.duration)}</div>
+                    ) : null}
+                    {getCurrentSetPrs(set, records, exercise.tracking).length ? (
                       <div className="pr-row">
-                        {getCurrentSetPrs(set, records).slice(0, 2).map((label) => (
+                        {getCurrentSetPrs(set, records, exercise.tracking).slice(0, 2).map((label) => (
                           <span key={label} className="pr-pill">{label}</span>
                         ))}
                       </div>
@@ -914,8 +1254,9 @@ function ActiveWorkoutScreen({
       </div>
 
       <section className="add-exercise-card">
+        <label className="field-label" htmlFor="exercise-search">Add exercise</label>
         <div className="filter-row" aria-label="Exercise category filter">
-          {['All', workout.type, 'Push', 'Pull', 'Lower', 'Core', 'Cardio']
+          {['All', normalizeWorkoutType(workout.type), 'Push', 'Pull', 'Legs', 'Core', 'Cardio']
             .filter((item, index, items) => item && items.indexOf(item) === index)
             .map((item) => (
               <button
@@ -931,8 +1272,9 @@ function ActiveWorkoutScreen({
         <div className="add-row">
           <Search className="input-icon" size={17} strokeWidth={2.2} />
           <input
+            id="exercise-search"
             type="text"
-            placeholder="Add exercise"
+            placeholder="Search exercise"
             value={exerciseInput}
             list="all-exercise-options"
             onChange={(event) => setExerciseInput(event.target.value)}
@@ -951,17 +1293,17 @@ function ActiveWorkoutScreen({
           {suggestions.map((exercise) => (
             <button key={exercise.name} type="button" className="chip rich-chip" onClick={() => addExercise(exercise.name)}>
               <span>{exercise.name}</span>
-              <small>{exercise.muscle}</small>
+              <small>{exercise.muscle} - {formatTrackingLabel(exercise.tracking)}</small>
             </button>
           ))}
         </div>
       </section>
 
       <section className="notes-card">
-        <label className="field-label" htmlFor="workout-notes">Workout notes</label>
+        <label className="field-label" htmlFor="workout-notes">Notes</label>
         <textarea
           id="workout-notes"
-          placeholder="Energy, injuries, PRs, form cues..."
+          placeholder="How did this workout feel?"
           value={workout.notes || ''}
           onChange={(event) => updateWorkoutNotes(event.target.value)}
         />
@@ -969,7 +1311,7 @@ function ActiveWorkoutScreen({
 
       <button type="button" className="secondary-button" onClick={onSaveTemplate}>
         <CopyPlus size={16} strokeWidth={2.4} />
-        Save as Template
+        Save as template
       </button>
       <button type="button" className="finish-button" onClick={onFinish}>
         Finish workout
@@ -1019,7 +1361,7 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
       <header className="panel-header">
         <div className="panel-copy">
           <h2>History</h2>
-          <p>Your saved workouts by day, time, and type.</p>
+          <p>Saved workouts with sets and notes.</p>
         </div>
       </header>
       {!ordered.length ? (
@@ -1031,7 +1373,8 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
       ) : null}
       {visibleWorkouts.map((workout) => {
         const isOpen = expanded === workout.id;
-        const TypeIcon = CATEGORY_ICONS[workout.type] || Dumbbell;
+        const displayType = normalizeWorkoutType(workout.type);
+        const TypeIcon = CATEGORY_ICONS[displayType] || Dumbbell;
         return (
           <div key={workout.id} className={`history-row ${swipedId === workout.id ? 'swiped' : ''}`}>
             <button
@@ -1054,11 +1397,13 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
               <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
                 <div>
                   <strong>
-                    <TypeIcon size={17} strokeWidth={2.2} />
+                    <span className={`category-badge small ${CATEGORY_BADGES[displayType] || ''}`}>
+                      <TypeIcon size={12} strokeWidth={2.5} />
+                    </span>
                     {formatShortDate(workout.date)} - {workout.label}
                   </strong>
                   <p className="history-time">
-                    {workout.type}
+                    {displayType}
                     {formatTime(workout.startedAt) ? ` - ${formatTime(workout.startedAt)}` : ''}
                   </p>
                   <p className="history-meta">
@@ -1084,9 +1429,10 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
                       </div>
                       <p>
                         {exercise.sets
-                          .filter((set) => set.weight !== '' && set.reps !== '')
-                          .map(formatSetSummary)
-                          .join(', ') || 'No completed sets'}
+                          .filter((set) => isSetComplete(set, exercise.tracking))
+                          .map((set) => formatSetSummary(set, exercise.tracking))
+                          .filter(Boolean)
+                          .join(', ') || 'No completed sets.'}
                       </p>
                     </div>
                   ))}
@@ -1117,7 +1463,7 @@ function TemplatesScreen({ templates, onStartTemplate, onDeleteTemplate }) {
       <header className="panel-header">
         <div className="panel-copy">
           <h2>Templates</h2>
-          <p>Start repeat workouts with the same exercise order and set layout.</p>
+          <p>Start repeat workouts with the same exercise order.</p>
         </div>
       </header>
       {!ordered.length ? (
@@ -1158,20 +1504,29 @@ function ChartsScreen({ workouts }) {
   const [category, setCategory] = useState('All');
   const [exerciseName, setExerciseName] = useState('');
   const [rangeId, setRangeId] = useState('90');
-  const [metric, setMetric] = useState('maxWeight');
+  const [metric, setMetric] = useState('sessions');
   const exerciseOptions = useMemo(() => getExerciseOptions(workouts, null, category), [workouts, category]);
+  const availableMetrics = useMemo(
+    () => getAvailableChartMetrics(workouts, category, exerciseName),
+    [workouts, category, exerciseName],
+  );
   const points = useMemo(
     () => getChartSeries(workouts, { category, exerciseName, rangeId, metric }),
     [workouts, category, exerciseName, rangeId, metric],
   );
-  const selectedMetric = CHART_METRICS.find((item) => item.id === metric) || CHART_METRICS[0];
+  const selectedMetric = availableMetrics.find((item) => item.id === metric) || availableMetrics[0] || CHART_METRIC_DEFINITIONS.sessions;
+
+  useEffect(() => {
+    if (availableMetrics.some((item) => item.id === metric)) return;
+    setMetric(availableMetrics[0]?.id || 'sessions');
+  }, [availableMetrics, metric]);
 
   return (
     <div className="screen stack-md">
       <header className="panel-header">
         <div className="panel-copy">
           <h2>Charts</h2>
-          <p>Graph workout categories, specific exercises, and the metrics that matter.</p>
+          <p>See progress with metrics that match each workout style.</p>
         </div>
       </header>
       {!workouts.length ? (
@@ -1198,7 +1553,9 @@ function ChartsScreen({ workouts }) {
                         setExerciseName('');
                       }}
                     >
-                      <Icon size={14} strokeWidth={2.3} />
+                      <span className={`category-badge small ${CATEGORY_BADGES[item] || ''}`}>
+                        <Icon size={12} strokeWidth={2.4} />
+                      </span>
                       {item}
                     </button>
                   );
@@ -1220,7 +1577,7 @@ function ChartsScreen({ workouts }) {
               <label>
                 <span><Flame size={15} strokeWidth={2.2} /> Metric</span>
                 <select value={metric} onChange={(event) => setMetric(event.target.value)} className="select-input">
-                  {CHART_METRICS.map((item) => (
+                  {availableMetrics.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.label}
                     </option>
@@ -1248,17 +1605,17 @@ function ChartsScreen({ workouts }) {
             <div className="chart-title-row">
               <div>
                 <strong>{selectedMetric.label}</strong>
-                <p>{exerciseName || `${category} workouts`}</p>
+                <p>{exerciseName || `${normalizeWorkoutType(category)} workouts`}</p>
               </div>
               <span>{points.length} points</span>
             </div>
             {points.length ? (
-              <MiniChart points={points} metricLabel={selectedMetric.label} />
+              <MiniChart points={points} metricLabel={selectedMetric.label} metricId={selectedMetric.id} />
             ) : (
               <div className="empty-panel compact">
                 <Activity size={24} strokeWidth={2.2} />
                 <strong>No matching data.</strong>
-                <p>Try a wider date range, another category, or all exercises.</p>
+                <p>Try another metric, more time, or a different exercise.</p>
               </div>
             )}
           </section>
@@ -1268,7 +1625,7 @@ function ChartsScreen({ workouts }) {
   );
 }
 
-function MiniChart({ points, metricLabel }) {
+function MiniChart({ points, metricLabel, metricId }) {
   const width = 360;
   const height = 230;
   const pad = 28;
@@ -1285,6 +1642,12 @@ function MiniChart({ points, metricLabel }) {
 
   const path = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
 
+  const formatChartPoint = (value) => {
+    if (metricId === 'pace' || metricId === 'totalTime' || metricId === 'bestTime') return formatDuration(value);
+    if (metricId === 'distance') return `${formatNumber(value, value % 1 === 0 ? 0 : 2)} mi`;
+    return Math.round(value);
+  };
+
   return (
     <div className="chart-wrap">
       <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label={`${metricLabel} progress chart`}>
@@ -1293,7 +1656,7 @@ function MiniChart({ points, metricLabel }) {
           <g key={`${point.date}-${point.value}`}>
             <circle cx={point.x} cy={point.y} r="4.5" fill="#e5484d" />
             <text x={point.x} y={point.y - 10} textAnchor="middle" className="chart-point-label">
-              {Math.round(point.value)}
+              {formatChartPoint(point.value)}
             </text>
             <text x={point.x} y={height - 6} textAnchor="middle" className="chart-axis-label">
               {formatShortDate(point.date).replace(/, \d{4}/, '')}
@@ -1335,7 +1698,7 @@ function BackupScreen({ workouts, templates, onImport, onReset }) {
       <header className="panel-header">
         <div className="panel-copy">
           <h2>Backup</h2>
-          <p>Keep a copy of your workouts in case this phone or browser data ever gets reset.</p>
+          <p>Keep a copy of your workouts in case this browser data ever gets reset.</p>
         </div>
       </header>
       <section className="backup-card">
@@ -1357,7 +1720,7 @@ function BackupScreen({ workouts, templates, onImport, onReset }) {
         </div>
         <div className="warning-card">
           <strong>Warning</strong>
-          <p>Reset deletes every saved workouts on this device. Export a backup first if you may need your history later.</p>
+          <p>Reset deletes every saved workout on this device. Export a backup first if you may need your history later.</p>
         </div>
         <button type="button" className="text-link danger-link reset-link" onClick={onReset}>
           Reset all local data
@@ -1373,11 +1736,11 @@ export default function App() {
   const [workoutTemplates, setWorkoutTemplates] = useState(() => readTemplates());
   const [activeWorkout, setActiveWorkout] = useState(() => readActiveWorkout());
   const [saveStatus, setSaveStatus] = useState(() => (readActiveWorkout() ? 'saved' : 'idle'));
+  const [showResumePrompt, setShowResumePrompt] = useState(() => Boolean(readActiveWorkout()));
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_REST_SECONDS);
   const [timerActive, setTimerActive] = useState(false);
   const [timerEndsAt, setTimerEndsAt] = useState(null);
   const [confettiBursts, setConfettiBursts] = useState([]);
-  const autosaveTimerRef = useRef(null);
 
   useEffect(() => {
     saveData({ workouts });
@@ -1392,22 +1755,15 @@ export default function App() {
 
   useEffect(() => {
     if (!activeWorkout) {
-      if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
       saveActiveWorkout(null);
       setSaveStatus('idle');
       return undefined;
     }
 
     setSaveStatus(navigator.onLine === false ? 'pending' : 'saving');
-    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = window.setTimeout(() => {
-      saveActiveWorkout(activeWorkout);
-      setSaveStatus(navigator.onLine === false ? 'pending' : 'saved');
-    }, AUTOSAVE_DELAY_MS);
-
-    return () => {
-      if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
-    };
+    saveActiveWorkout(activeWorkout);
+    setSaveStatus(navigator.onLine === false ? 'pending' : 'saved');
+    return undefined;
   }, [activeWorkout]);
 
   useEffect(() => {
@@ -1467,7 +1823,9 @@ export default function App() {
   }, [timerActive, timerEndsAt]);
 
   const startWorkout = (type, customName = '') => {
+    if (hasWorkoutContent(activeWorkout) && !window.confirm('Start a new workout and replace your unfinished draft?')) return;
     setActiveWorkout(createWorkout(type, customName, workouts));
+    setShowResumePrompt(false);
     setTab('Workout');
     setTimerActive(false);
     setTimerEndsAt(null);
@@ -1479,6 +1837,7 @@ export default function App() {
     if (!template) return;
     if (hasWorkoutContent(activeWorkout) && !window.confirm('Start this template and replace your unfinished workout draft?')) return;
     setActiveWorkout(createWorkoutFromTemplate(template));
+    setShowResumePrompt(false);
     setWorkoutTemplates((current) =>
       current.map((item) => (item.id === templateId ? { ...item, lastUsedAt: nowValue() } : item)),
     );
@@ -1513,15 +1872,16 @@ export default function App() {
     if (!hasWorkoutContent(activeWorkout)) {
       setActiveWorkout(null);
       saveActiveWorkout(null);
+      setShowResumePrompt(false);
       return;
     }
     const completedWorkout = { ...activeWorkout, completedAt: nowValue() };
-    setWorkouts((current) => {
-      const withoutDraftDuplicate = current.filter((workout) => workout.id !== completedWorkout.id);
-      return [completedWorkout, ...withoutDraftDuplicate];
-    });
+    const nextWorkouts = [completedWorkout, ...workouts.filter((workout) => workout.id !== completedWorkout.id)];
+    saveData({ workouts: nextWorkouts });
+    setWorkouts(nextWorkouts);
     setActiveWorkout(null);
     saveActiveWorkout(null);
+    setShowResumePrompt(false);
     setTimerActive(false);
     setTimerEndsAt(null);
     setSecondsLeft(DEFAULT_REST_SECONDS);
@@ -1532,10 +1892,11 @@ export default function App() {
     try {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed.workouts)) throw new Error('Invalid backup file');
-      setWorkouts(parsed.workouts);
-      if (Array.isArray(parsed.templates)) setWorkoutTemplates(parsed.templates);
+      setWorkouts(parsed.workouts.map((workout) => normalizeWorkout(workout)));
+      setWorkoutTemplates(Array.isArray(parsed.templates) ? parsed.templates.map((template) => normalizeTemplate(template)) : []);
       setActiveWorkout(null);
       saveActiveWorkout(null);
+      setShowResumePrompt(false);
       setTab('History');
     } catch {
       window.alert('Could not import that backup file.');
@@ -1546,17 +1907,18 @@ export default function App() {
     const source = workouts.find((item) => item.id === workoutId);
     if (!source) return;
     setActiveWorkout({
-      ...source,
+      ...normalizeWorkout(source),
       id: createId(),
       date: todayValue(),
       startedAt: nowValue(),
       exercises: source.exercises.map((exercise) => ({
-        ...exercise,
+        ...normalizeExercise(exercise),
         id: createId(),
-        sets: exercise.sets.map((set) => ({ ...set, id: createId() })),
+        sets: exercise.sets.map((set) => ({ ...normalizeSet(set, exercise.tracking), id: createId() })),
       })),
       notes: source.notes || '',
     });
+    setShowResumePrompt(false);
     setTab('Workout');
     setTimerActive(false);
     setTimerEndsAt(null);
@@ -1616,6 +1978,7 @@ export default function App() {
     setWorkoutTemplates([]);
     setActiveWorkout(null);
     saveActiveWorkout(null);
+    setShowResumePrompt(false);
     setTimerActive(false);
     setTimerEndsAt(null);
     setSecondsLeft(DEFAULT_REST_SECONDS);
@@ -1628,11 +1991,12 @@ export default function App() {
     if (hasWorkoutContent(activeWorkout) && !window.confirm('Discard this unfinished workout and choose another?')) return;
     setActiveWorkout(null);
     saveActiveWorkout(null);
+    setShowResumePrompt(false);
   };
 
   const content =
     tab === 'Workout' ? (
-      activeWorkout ? (
+      activeWorkout && !showResumePrompt ? (
         <ActiveWorkoutScreen
           workout={activeWorkout}
           workouts={workouts}
@@ -1653,7 +2017,12 @@ export default function App() {
           }}
         />
       ) : (
-        <ChooseWorkoutScreen onStart={startWorkout} />
+        <ChooseWorkoutScreen
+          onStart={startWorkout}
+          draftWorkout={activeWorkout}
+          onResumeDraft={() => setShowResumePrompt(false)}
+          onDiscardDraft={changeWorkout}
+        />
       )
     ) : tab === 'History' ? (
       <HistoryScreen

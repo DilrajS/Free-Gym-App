@@ -16,6 +16,17 @@
 }
 
 * { box-sizing: border-box; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 html, body, #root { min-height: 100%; }
 html { background: var(--bg); }
 body {
@@ -186,6 +197,32 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
+.category-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.category-badge.small {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+}
+.category-badge.push { background: linear-gradient(180deg, rgba(255, 107, 107, 0.35), rgba(229, 72, 77, 0.2)); }
+.category-badge.pull { background: linear-gradient(180deg, rgba(118, 168, 255, 0.28), rgba(118, 168, 255, 0.14)); }
+.category-badge.upper { background: linear-gradient(180deg, rgba(188, 154, 255, 0.28), rgba(188, 154, 255, 0.12)); }
+.category-badge.legs { background: linear-gradient(180deg, rgba(252, 196, 109, 0.28), rgba(252, 196, 109, 0.14)); }
+.category-badge.full-body { background: linear-gradient(180deg, rgba(119, 229, 168, 0.24), rgba(119, 229, 168, 0.12)); }
+.category-badge.core { background: linear-gradient(180deg, rgba(137, 209, 255, 0.26), rgba(137, 209, 255, 0.12)); }
+.category-badge.cardio { background: linear-gradient(180deg, rgba(255, 167, 118, 0.28), rgba(255, 167, 118, 0.12)); }
+.category-badge.custom { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)); }
 .workout-choice strong {
   color: #747e89;
   font-size: 2rem;
@@ -206,6 +243,11 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+.inline-link {
+  justify-self: start;
+  padding: 0;
+  text-decoration: none;
 }
 .custom-sheet, .backup-card, .chart-card, .history-card, .template-card, .empty-panel, .exercise-card, .add-exercise-card, .notes-card, .chart-controls {
   background: linear-gradient(180deg, rgba(21,24,29,0.95), rgba(17,20,25,0.98));
@@ -414,9 +456,11 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .set-row {
   display: grid;
-  grid-template-columns: 40px 1fr 1fr 34px;
   gap: 10px;
   align-items: center;
+}
+.set-field {
+  display: block;
 }
 .set-number {
   color: var(--text);
@@ -445,6 +489,12 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   padding: 3px 8px;
   font-size: 0.72rem;
   font-weight: 800;
+}
+.set-subtext {
+  padding-left: 50px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 .add-exercise-card, .notes-card { display: grid; gap: 14px; padding: 16px; }
 .add-row {
@@ -501,6 +551,7 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   gap: 6px;
   font-size: 0.86rem;
   font-weight: 800;
+  text-transform: none;
 }
 .segmented-chip.active {
   color: white;
@@ -594,6 +645,9 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   grid-template-columns: 1fr auto;
   gap: 14px;
   align-items: center;
+}
+.resume-card {
+  border-color: rgba(229,72,77,0.28);
 }
 .template-copy {
   display: grid;
@@ -742,6 +796,11 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 @media (max-width: 640px) {
   .app-shell { padding-left: 16px; padding-right: 16px; }
   .workout-choice { font-size: 1.4rem; padding: 20px 18px; }
+  .category-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
   h2 { font-size: 1.7rem; }
   .bottom-nav {
     gap: 5px;
@@ -772,7 +831,6 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   }
   .set-table-header,
   .set-row {
-    grid-template-columns: 34px 1fr 1fr 30px;
     gap: 8px;
   }
   .mini-icon-button {
@@ -780,6 +838,9 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
     height: 44px;
   }
   .pr-row {
+    padding-left: 42px;
+  }
+  .set-subtext {
     padding-left: 42px;
   }
   .template-card {
