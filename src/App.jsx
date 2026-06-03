@@ -18,6 +18,7 @@ import {
   FileUp,
   Flame,
   History,
+  Info,
   ListFilter,
   MoveHorizontal,
   Footprints,
@@ -27,6 +28,7 @@ import {
   Search,
   Shield,
   SquarePen,
+  Timer,
   Trash2,
   TrendingUp,
   Users,
@@ -254,7 +256,7 @@ function getTrackingConfig(tracking) {
     tracking: 'weight/reps',
     metricIds: ['sessions', 'maxWeight', 'estimated1rm', 'volume', 'reps', 'sets'],
     fields: [
-      { key: 'weight', label: 'Weight', placeholder: '135', inputMode: 'decimal', type: 'number', previousKey: 'previousWeight' },
+      { key: 'weight', label: 'Weight (lb)', placeholder: '135', inputMode: 'decimal', type: 'number', previousKey: 'previousWeight' },
       { key: 'reps', label: 'Reps', placeholder: '8', inputMode: 'numeric', type: 'number', previousKey: 'previousReps' },
     ],
   };
@@ -279,6 +281,17 @@ function createSetForTracking(tracking, previousSet = {}) {
     previousReps: previousSet.reps ?? '',
     previousDistance: previousSet.distance ?? '',
     previousDuration: previousSet.duration ?? '',
+  };
+}
+
+function createPrefilledSetForTracking(tracking, previousSet = {}) {
+  const normalizedSet = normalizeSet(previousSet, tracking);
+  return {
+    ...createSetForTracking(tracking, normalizedSet),
+    weight: normalizedSet.weight ?? '',
+    reps: normalizedSet.reps ?? '',
+    distance: normalizedSet.distance ?? '',
+    duration: normalizedSet.duration ?? '',
   };
 }
 
@@ -340,6 +353,21 @@ function formatSetSummary(set, tracking = 'weight/reps') {
   return `${formatDistance(set.weight)} lb x ${formatNumber(parseNumericValue(set.reps))}`;
 }
 
+function formatPreviousSetSummary(set, tracking = 'weight/reps') {
+  const normalizedTracking = normalizeTracking(tracking);
+  if (!isSetComplete(set, normalizedTracking)) return '';
+  if (normalizedTracking === 'weight/reps') {
+    return `${formatDistance(set.weight)}×${formatNumber(parseNumericValue(set.reps))}`;
+  }
+  if (normalizedTracking === 'bodyweight') {
+    const addedWeight = parseNumericValue(set.weight);
+    return addedWeight && addedWeight > 0
+      ? `${formatNumber(parseNumericValue(set.reps))} reps +${formatNumber(addedWeight, addedWeight % 1 === 0 ? 0 : 2)}`
+      : `${formatNumber(parseNumericValue(set.reps))} reps`;
+  }
+  return formatSetSummary(set, normalizedTracking);
+}
+
 function getExerciseMeta(name) {
   const normalized = normalizeName(name);
   return EXERCISE_LIBRARY.find((exercise) => normalizeName(exercise.name) === normalized) || null;
@@ -365,8 +393,8 @@ function normalizeExercise(exercise = {}) {
 
 function createExercise(name = '', previousSets = []) {
   const populatedSets = previousSets
-    .filter((set) => Object.values(set || {}).some((value) => value !== '' && value !== null && value !== undefined))
-    .map((set) => set);
+    .map((set) => normalizeSet(set, getExerciseMeta(name)?.tracking || 'weight/reps'))
+    .filter((set) => isSetComplete(set, getExerciseMeta(name)?.tracking || 'weight/reps'));
 
   const meta = getExerciseMeta(name);
   const tracking = normalizeTracking(meta?.tracking || 'weight/reps');
@@ -377,7 +405,7 @@ function createExercise(name = '', previousSets = []) {
     equipment: meta?.equipment || '',
     tracking,
     sets: populatedSets.length
-      ? populatedSets.map((set) => createSetForTracking(tracking, normalizeSet(set, tracking)))
+      ? populatedSets.map((set) => createPrefilledSetForTracking(tracking, set))
       : [createSetForTracking(tracking)],
   });
 }
@@ -576,9 +604,9 @@ function createWorkoutFromTemplate(template) {
   });
 }
 
-function findLastExercise(workouts, currentWorkoutId, exerciseName) {
+function findLastExerciseSets(workouts, currentWorkoutId, exerciseName) {
   const normalized = normalizeName(exerciseName);
-  if (!normalized) return null;
+  if (!normalized) return [];
 
   const prior = workouts
     .filter((workout) => workout.id !== currentWorkoutId)
@@ -588,13 +616,13 @@ function findLastExercise(workouts, currentWorkoutId, exerciseName) {
     for (const exercise of workout.exercises || []) {
       if (normalizeName(exercise.name) === normalized) {
         const completeSets = (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking));
-        if (!completeSets.length) return null;
-        return completeSets.map((set) => formatSetSummary(set, exercise.tracking)).join(', ');
+        if (!completeSets.length) return [];
+        return completeSets;
       }
     }
   }
 
-  return null;
+  return [];
 }
 
 function collectExerciseNames(workouts, activeWorkout) {
@@ -712,7 +740,7 @@ function getCurrentSetPrs(set, exerciseRecords, tracking = 'weight/reps') {
   // Epley estimate: weight * (1 + reps / 30). Good enough for lightweight PR hints.
   const estimated1rm = hasWeight && hasReps ? estimateOneRepMax(weight, reps) : 0;
   if (hasWeight && weight > exerciseRecords.maxWeight) prs.push('Max weight PR');
-  if (estimated1rm && estimated1rm > exerciseRecords.estimated1rm) prs.push('Estimated 1RM PR');
+  if (estimated1rm && estimated1rm > exerciseRecords.estimated1rm) prs.push(`1RM: ${estimated1rm} lb`);
   if (volume && volume > exerciseRecords.bestVolume) prs.push('Volume PR');
   if (hasReps && reps > exerciseRecords.bestReps) prs.push('Rep PR');
   return prs;
@@ -727,7 +755,7 @@ function getLastPerformanceMap(workouts) {
         const normalized = normalizeName(exercise.name);
         if (!normalized || map.has(normalized)) return;
         const completeSets = (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking));
-        if (completeSets.length) map.set(normalized, completeSets.map((set) => formatSetSummary(set, exercise.tracking)).join(', '));
+        if (completeSets.length) map.set(normalized, completeSets.map((set) => formatPreviousSetSummary(set, exercise.tracking)).join(' • '));
       });
     });
   return map;
@@ -849,6 +877,9 @@ function BottomNav({ tab, onChange }) {
     Charts: ChartColumn,
     Backup: FileArchive,
   };
+  const tabLabels = {
+    Charts: 'Progress',
+  };
 
   return (
     <nav className="bottom-nav">
@@ -862,7 +893,7 @@ function BottomNav({ tab, onChange }) {
             onClick={() => onChange(item)}
           >
             <Icon size={18} strokeWidth={2.2} />
-            {item}
+            {tabLabels[item] || item}
           </button>
         );
       })}
@@ -984,7 +1015,8 @@ function TimerPill({ secondsLeft, active, onReset }) {
   const seconds = String(secondsLeft % 60).padStart(2, '0');
 
   return (
-    <button type="button" className="timer-pill timer-pill-active" onClick={onReset}>
+    <button type="button" className="timer-pill timer-pill-active" onClick={onReset} aria-label="Reset rest timer">
+      <Timer size={15} strokeWidth={2.4} />
       {minutes}:{seconds}
     </button>
   );
@@ -1008,6 +1040,7 @@ function ActiveWorkoutScreen({
   const [lastEditedFieldId, setLastEditedFieldId] = useState('');
   const [bodyweightWeightVisible, setBodyweightWeightVisible] = useState({});
   const [exerciseFilter, setExerciseFilter] = useState(normalizeWorkoutType(workout.type) === 'Custom' ? 'All' : normalizeWorkoutType(workout.type));
+  const [showOneRepMaxInfo, setShowOneRepMaxInfo] = useState(false);
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter),
     [workouts, workout, exerciseFilter],
@@ -1027,19 +1060,24 @@ function ActiveWorkoutScreen({
     const nextTracking = normalizeTracking(meta?.tracking || 'weight/reps');
     onUpdate({
       ...workout,
-      exercises: workout.exercises.map((exercise) =>
-        exercise.id === exerciseId
-          ? {
-              ...exercise,
-              name,
-              muscle: meta?.muscle || exercise.muscle || '',
-              type: normalizeWorkoutType(meta?.type || exercise.type || ''),
-              equipment: meta?.equipment || exercise.equipment || '',
-              tracking: nextTracking,
-              sets: exercise.sets.map((set) => normalizeSet(set, nextTracking)),
-            }
-          : exercise,
-      ),
+      exercises: workout.exercises.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        const hasTypedSetValues = exercise.sets.some((set) =>
+          ['weight', 'reps', 'distance', 'duration'].some((key) => String(set?.[key] ?? '').trim()),
+        );
+        const previousSets = !hasTypedSetValues ? findLastExerciseSets(workouts, workout.id, name) : [];
+        return {
+          ...exercise,
+          name,
+          muscle: meta?.muscle || exercise.muscle || '',
+          type: normalizeWorkoutType(meta?.type || exercise.type || ''),
+          equipment: meta?.equipment || exercise.equipment || '',
+          tracking: nextTracking,
+          sets: previousSets.length
+            ? previousSets.map((set) => createPrefilledSetForTracking(nextTracking, set))
+            : exercise.sets.map((set) => normalizeSet(set, nextTracking)),
+        };
+      }),
     });
   };
 
@@ -1085,9 +1123,10 @@ function ActiveWorkoutScreen({
 
   const addExercise = (name = '') => {
     const finalName = name.trim();
+    const previousSets = findLastExerciseSets(workouts, workout.id, finalName);
     onUpdate({
       ...workout,
-      exercises: [...workout.exercises, createExercise(finalName)],
+      exercises: [...workout.exercises, createExercise(finalName, previousSets)],
     });
     setExerciseInput('');
   };
@@ -1122,11 +1161,8 @@ function ActiveWorkoutScreen({
 
   return (
     <div className="screen">
-      <div className="timer-sticky-wrap">
-        <TimerPill secondsLeft={secondsLeft} active={timerActive} onReset={onResetTimer} />
-      </div>
       <header className="session-header">
-        <div>
+        <div className="session-title">
           <button type="button" className="back-link" onClick={() => onUpdate(null)}>
             <ArrowLeft size={16} strokeWidth={2.3} />
             Change workout
@@ -1134,7 +1170,10 @@ function ActiveWorkoutScreen({
           <h2>{workout.label}</h2>
           <p>{formatLongDate(workout.date)}</p>
         </div>
-        <SaveStatusPill status={saveStatus} />
+        <div className="session-pills">
+          <TimerPill secondsLeft={secondsLeft} active={timerActive} onReset={onResetTimer} />
+          <SaveStatusPill status={saveStatus} />
+        </div>
       </header>
 
       <div className="exercise-stack">
@@ -1169,7 +1208,9 @@ function ActiveWorkoutScreen({
                       <span key={item} className="tiny-label">{item}</span>
                     ))}
                   </div>
-                  <p className="last-time">{lastTime ? `Last time: ${lastTime}` : 'Last time: no saved workout yet.'}</p>
+                  <p className="last-time" title={lastTime ? `Previous: ${lastTime}` : 'Previous: no saved workout yet.'}>
+                    {lastTime ? `Previous: ${lastTime}` : 'Previous: no saved workout yet.'}
+                  </p>
                 </div>
                 <div className="exercise-actions">
                   <button type="button" className="icon-button" onClick={() => moveExercise(index, -1)} aria-label="Move up">
@@ -1236,7 +1277,19 @@ function ActiveWorkoutScreen({
                     {getCurrentSetPrs(set, records, exercise.tracking).length ? (
                       <div className="pr-row">
                         {getCurrentSetPrs(set, records, exercise.tracking).slice(0, 2).map((label) => (
-                          <span key={label} className="pr-pill">{label}</span>
+                          label.startsWith('1RM:') ? (
+                            <button
+                              key={label}
+                              type="button"
+                              className="pr-pill pr-info-button"
+                              onClick={() => setShowOneRepMaxInfo(true)}
+                            >
+                              {label}
+                              <Info size={12} strokeWidth={2.4} />
+                            </button>
+                          ) : (
+                            <span key={label} className="pr-pill">{label}</span>
+                          )
                         ))}
                       </div>
                     ) : null}
@@ -1316,6 +1369,19 @@ function ActiveWorkoutScreen({
       <button type="button" className="finish-button" onClick={onFinish}>
         Finish workout
       </button>
+      {showOneRepMaxInfo ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowOneRepMaxInfo(false)}>
+          <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="one-rep-max-title" onClick={(event) => event.stopPropagation()}>
+            <div className="sheet-header">
+              <h3 id="one-rep-max-title">Estimated 1RM</h3>
+              <button type="button" className="sheet-close" aria-label="Close 1RM explanation" onClick={() => setShowOneRepMaxInfo(false)}>
+                <X size={18} strokeWidth={2.4} />
+              </button>
+            </div>
+            <p>Estimated 1RM means estimated one-rep max. It predicts the maximum weight you could lift for one repetition based on this set.</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
