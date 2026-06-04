@@ -215,6 +215,17 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   height: 20px;
   border-radius: 7px;
 }
+.category-badge.media-badge {
+  padding: 2px;
+  overflow: hidden;
+}
+.category-badge.media-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
 .category-badge.push { background: linear-gradient(180deg, rgba(255, 107, 107, 0.35), rgba(229, 72, 77, 0.2)); }
 .category-badge.pull { background: linear-gradient(180deg, rgba(118, 168, 255, 0.28), rgba(118, 168, 255, 0.14)); }
 .category-badge.upper { background: linear-gradient(180deg, rgba(188, 154, 255, 0.28), rgba(188, 154, 255, 0.12)); }
@@ -496,6 +507,11 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .icon-button { width: 30px; height: 30px; }
 .icon-button.danger, .danger-link { color: var(--accent-strong); }
+.icon-button.favorite-active {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.08);
+}
 .mini-icon-button {
   width: 30px;
   height: 40px;
@@ -647,6 +663,8 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .exercise-detail-modal {
   width: min(480px, 100%);
+  max-height: min(760px, calc(100vh - 36px));
+  overflow: auto;
 }
 .exercise-hero-media {
   width: 100%;
@@ -696,6 +714,60 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .machine-photo-actions .upload-error {
   color: var(--accent-strong);
+}
+.plate-calculator {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.025);
+}
+.plate-calculator h4 {
+  margin: 0 0 3px;
+  font-size: 0.95rem;
+}
+.plate-calculator p {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+.plate-input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.plate-input-row label {
+  display: grid;
+  gap: 5px;
+}
+.plate-input-row span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.plate-input-row input {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+.plate-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.plate-result span {
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--text);
+  background: rgba(229,72,77,0.12);
+  border: 1px solid rgba(229,72,77,0.22);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.plate-result small {
+  color: var(--muted);
 }
 .filter-row {
   display: flex;

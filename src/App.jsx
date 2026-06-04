@@ -2,11 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowDown,
-  ArrowDownLeft,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  Bike,
   CalendarRange,
   ChartColumn,
   CheckCircle2,
@@ -20,25 +18,23 @@ import {
   History,
   Info,
   ListFilter,
-  MoveHorizontal,
-  Footprints,
   Play,
   Plus,
   Save,
   Search,
-  Shield,
   SquarePen,
+  Star,
   Timer,
   Trash2,
   TrendingUp,
-  Users,
-  Target,
   X,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'gym-log-v2';
 const ACTIVE_WORKOUT_KEY = `${STORAGE_KEY}-active-workout`;
 const WORKOUT_TEMPLATES_KEY = `${STORAGE_KEY}-templates`;
+const FAVORITE_EXERCISES_KEY = `${STORAGE_KEY}-favorite-exercises`;
+const WGER_MEDIA_CACHE_KEY = `${STORAGE_KEY}-wger-media`;
 const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Backup'];
 const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
 const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
@@ -73,6 +69,18 @@ const DEFAULT_REST_SECONDS = 120;
 const HISTORY_PAGE_SIZE = 12;
 const MEDIA_SOURCES = ['library', 'generated', 'custom', 'user_photo'];
 const MACHINE_PHOTO_SIZE = 256;
+const WGER_EXERCISE_INFO_URL = 'https://wger.de/api/v2/exerciseinfo/?language=2&limit=160';
+const WGER_MEDIA_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 14;
+const CATEGORY_MEDIA_LABELS = {
+  Push: 'Chest',
+  Pull: 'Back',
+  Upper: 'Shoulders',
+  Legs: 'Quads',
+  'Full Body': 'Full',
+  Core: 'Core',
+  Cardio: 'Cardio',
+  Custom: 'Custom',
+};
 
 const EXERCISE_LIBRARY = [
   { name: 'Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
@@ -116,17 +124,6 @@ const EXERCISE_LIBRARY = [
   { name: 'Rowing Machine', muscle: 'Cardio', type: 'Cardio', equipment: 'Rower', tracking: 'distance/time' },
   { name: 'Stair Climber', muscle: 'Cardio', type: 'Cardio', equipment: 'Machine', tracking: 'time' },
 ];
-
-const CATEGORY_ICONS = {
-  Push: Target,
-  Pull: ArrowDownLeft,
-  Upper: Users,
-  Legs: Footprints,
-  'Full Body': MoveHorizontal,
-  Core: Shield,
-  Cardio: Bike,
-  Custom: SquarePen,
-};
 
 const CATEGORY_BADGES = {
   Push: 'push',
@@ -195,17 +192,72 @@ function normalizeMediaSource(source, fallback = 'library') {
   return MEDIA_SOURCES.includes(source) ? source : fallback;
 }
 
-function normalizeExerciseMedia(exercise = {}, meta = null) {
+function encodeSvg(svg) {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function getMuscleAccent(muscle = '', type = '') {
+  const key = normalizeName(muscle || type);
+  if (['chest', 'triceps', 'push'].includes(key)) return ['#ff777a', '#e5484d'];
+  if (['back', 'biceps', 'pull'].includes(key)) return ['#76a8ff', '#3d6ed8'];
+  if (['quads', 'hamstrings', 'glutes', 'calves', 'legs'].includes(key)) return ['#ffd166', '#d99d31'];
+  if (['core'].includes(key)) return ['#89d1ff', '#438fb8'];
+  if (['cardio'].includes(key)) return ['#ffa776', '#d66f3d'];
+  if (['shoulders', 'upper'].includes(key)) return ['#bc9aff', '#7b61d6'];
+  return ['#d5d9df', '#747e89'];
+}
+
+function createMuscleMediaDataUrl(muscle = 'Exercise', type = 'Custom') {
+  const [primary, secondary] = getMuscleAccent(muscle, type);
+  const label = String(muscle || type || 'Gym').slice(0, 10);
+  return encodeSvg(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop stop-color="#191d23"/>
+          <stop offset="1" stop-color="#0f1216"/>
+        </linearGradient>
+        <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+          <stop stop-color="${primary}"/>
+          <stop offset="1" stop-color="${secondary}"/>
+        </linearGradient>
+      </defs>
+      <rect width="256" height="256" rx="36" fill="url(#bg)"/>
+      <circle cx="54" cy="58" r="30" fill="${primary}" opacity=".18"/>
+      <circle cx="202" cy="198" r="40" fill="${secondary}" opacity=".14"/>
+      <g fill="none" stroke="url(#accent)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M72 142c18-34 42-52 72-52 19 0 35 7 48 20"/>
+        <path d="M64 162c25 18 51 27 78 27 23 0 42-6 58-18"/>
+        <path d="M92 96c-10 13-15 28-15 45"/>
+        <path d="M180 112c8 13 12 28 12 44"/>
+      </g>
+      <text x="128" y="224" fill="#f3f5f7" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" text-anchor="middle">${label}</text>
+    </svg>
+  `);
+}
+
+function getFallbackLibraryMedia(exercise = {}) {
+  if (!exercise.name && !exercise.muscle && !exercise.type) return {};
+  const imageUrl = createMuscleMediaDataUrl(exercise.muscle || CATEGORY_MEDIA_LABELS[normalizeWorkoutType(exercise.type)] || 'Exercise', exercise.type);
+  return {
+    imageUrl,
+    thumbnailUrl: imageUrl,
+    mediaSource: 'library',
+  };
+}
+
+function normalizeExerciseMedia(exercise = {}, meta = null, libraryMedia = {}, includeFallback = false) {
   const source = exercise.media || {};
   const metaMedia = meta?.media || {};
   const machinePhotoThumbnailUrl = exercise.machinePhotoThumbnailUrl || source.machinePhotoThumbnailUrl || '';
   const machinePhotoUrl = exercise.machinePhotoUrl || source.machinePhotoUrl || machinePhotoThumbnailUrl;
-  const imageUrl = exercise.imageUrl || source.imageUrl || meta?.imageUrl || metaMedia.imageUrl || '';
-  const thumbnailUrl = exercise.thumbnailUrl || source.thumbnailUrl || meta?.thumbnailUrl || metaMedia.thumbnailUrl || imageUrl;
-  const videoUrl = exercise.videoUrl || source.videoUrl || meta?.videoUrl || metaMedia.videoUrl || '';
-  const animationUrl = exercise.animationUrl || source.animationUrl || meta?.animationUrl || metaMedia.animationUrl || '';
+  const fallbackMedia = includeFallback ? getFallbackLibraryMedia({ ...meta, ...exercise }) : {};
+  const imageUrl = exercise.imageUrl || source.imageUrl || meta?.imageUrl || metaMedia.imageUrl || libraryMedia.imageUrl || fallbackMedia.imageUrl || '';
+  const thumbnailUrl = exercise.thumbnailUrl || source.thumbnailUrl || meta?.thumbnailUrl || metaMedia.thumbnailUrl || libraryMedia.thumbnailUrl || imageUrl;
+  const videoUrl = exercise.videoUrl || source.videoUrl || meta?.videoUrl || metaMedia.videoUrl || libraryMedia.videoUrl || '';
+  const animationUrl = exercise.animationUrl || source.animationUrl || meta?.animationUrl || metaMedia.animationUrl || libraryMedia.animationUrl || '';
   const mediaSource = normalizeMediaSource(
-    exercise.mediaSource || source.mediaSource || meta?.mediaSource || metaMedia.mediaSource,
+    exercise.mediaSource || source.mediaSource || meta?.mediaSource || metaMedia.mediaSource || libraryMedia.mediaSource,
     imageUrl || thumbnailUrl || videoUrl || animationUrl ? 'library' : 'custom',
   );
 
@@ -221,17 +273,17 @@ function normalizeExerciseMedia(exercise = {}, meta = null) {
   };
 }
 
-function getExerciseMedia(exercise = {}) {
-  return normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name));
+function getExerciseMedia(exercise = {}, mediaLibrary = {}) {
+  return normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name), mediaLibrary[normalizeName(exercise.name)], true);
 }
 
-function getExerciseThumbnailUrl(exercise = {}) {
-  const media = getExerciseMedia(exercise);
+function getExerciseThumbnailUrl(exercise = {}, mediaLibrary = {}) {
+  const media = getExerciseMedia(exercise, mediaLibrary);
   return media.machinePhotoThumbnailUrl || media.thumbnailUrl || media.imageUrl || '';
 }
 
-function getExerciseDemoUrl(exercise = {}) {
-  const media = getExerciseMedia(exercise);
+function getExerciseDemoUrl(exercise = {}, mediaLibrary = {}) {
+  const media = getExerciseMedia(exercise, mediaLibrary);
   return media.videoUrl || media.animationUrl || media.imageUrl || media.thumbnailUrl || '';
 }
 
@@ -498,6 +550,7 @@ function normalizeWorkout(workout = {}) {
     type: normalizedType,
     label: normalizedLabel,
     notes: workout.notes || '',
+    effortRating: workout.effortRating || '',
     exercises: Array.isArray(workout.exercises) ? workout.exercises.map((exercise) => normalizeExercise(exercise)) : [createExercise()],
   };
 }
@@ -618,6 +671,69 @@ function saveTemplates(templates) {
   );
 }
 
+function readFavoriteExercises() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAVORITE_EXERCISES_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFavoriteExercises(names) {
+  localStorage.setItem(FAVORITE_EXERCISES_KEY, JSON.stringify(Array.isArray(names) ? names : []));
+}
+
+function readCachedWgerMedia() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WGER_MEDIA_CACHE_KEY) || 'null');
+    if (!parsed?.updatedAt || !parsed?.media) return {};
+    if (Date.now() - new Date(parsed.updatedAt).getTime() > WGER_MEDIA_CACHE_MAX_AGE) return {};
+    return parsed.media;
+  } catch {
+    return {};
+  }
+}
+
+function saveCachedWgerMedia(media) {
+  localStorage.setItem(WGER_MEDIA_CACHE_KEY, JSON.stringify({ updatedAt: nowValue(), media }));
+}
+
+function extractWgerImageUrl(image = {}) {
+  return image.image || image.url || image.original || image.thumbnail || image.image_url || '';
+}
+
+function mapWgerExerciseMedia(results = []) {
+  return results.reduce((media, item) => {
+    const translation = Array.isArray(item.exercises)
+      ? item.exercises.find((entry) => entry.language === 2 || entry.language?.id === 2) || item.exercises[0]
+      : null;
+    const name = item.name || translation?.name || '';
+    const image = Array.isArray(item.images) ? item.images.find((entry) => entry.is_main) || item.images[0] : null;
+    const imageUrl = extractWgerImageUrl(image);
+    if (!name || !imageUrl) return media;
+    media[normalizeName(name)] = {
+      imageUrl,
+      thumbnailUrl: imageUrl,
+      mediaSource: 'library',
+    };
+    return media;
+  }, {});
+}
+
+async function fetchWgerExerciseMedia() {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(WGER_EXERCISE_INFO_URL, { signal: controller.signal });
+    if (!response.ok) throw new Error('Library media unavailable');
+    const data = await response.json();
+    return mapWgerExerciseMedia(Array.isArray(data.results) ? data.results : []);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 function hasWorkoutContent(workout) {
   if (!workout) return false;
   if (String(workout.notes || '').trim()) return true;
@@ -717,16 +833,25 @@ function collectExerciseEntries(workouts, activeWorkout) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function getExerciseOptions(workouts, activeWorkout, category = 'All') {
+function getExerciseOptions(workouts, activeWorkout, category = 'All', mediaLibrary = {}, favoriteNames = []) {
   const normalizedCategory = normalizeWorkoutType(category);
-  const library = EXERCISE_LIBRARY.filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
+  const categoryForSearch = normalizedCategory === 'Favorites' ? 'All' : normalizedCategory;
+  const favorites = new Set(favoriteNames.map(normalizeName));
+  const library = EXERCISE_LIBRARY.filter((exercise) => categoryForSearch === 'All' || normalizeWorkoutType(exercise.type) === categoryForSearch);
   const used = collectExerciseEntries(workouts, activeWorkout)
     .map((exercise) => ({ ...(getExerciseMeta(exercise.name) || { muscle: 'Custom', type: 'Custom', equipment: 'Custom', tracking: 'weight/reps' }), ...exercise }))
-    .filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
+    .filter((exercise) => categoryForSearch === 'All' || normalizeWorkoutType(exercise.type) === categoryForSearch);
   const byName = new Map([...library, ...used].map((exercise) => [normalizeName(exercise.name), exercise]));
-  return [...byName.values()].sort((a, b) => {
+  return [...byName.values()]
+    .map((exercise) => ({
+      ...exercise,
+      isFavorite: favorites.has(normalizeName(exercise.name)),
+      media: normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name), mediaLibrary[normalizeName(exercise.name)], true),
+    }))
+    .filter((exercise) => normalizedCategory !== 'Favorites' || exercise.isFavorite)
+    .sort((a, b) => {
     const typeSort = CATEGORY_ORDER.indexOf(normalizeWorkoutType(a.type)) - CATEGORY_ORDER.indexOf(normalizeWorkoutType(b.type));
-    return typeSort || a.muscle.localeCompare(b.muscle) || a.name.localeCompare(b.name);
+    return Number(b.isFavorite) - Number(a.isFavorite) || typeSort || a.muscle.localeCompare(b.muscle) || a.name.localeCompare(b.name);
   });
 }
 
@@ -980,6 +1105,16 @@ function BottomNav({ tab, onChange }) {
   );
 }
 
+function CategoryMediaBadge({ type, size = 'md' }) {
+  const normalizedType = normalizeWorkoutType(type);
+  const mediaUrl = createMuscleMediaDataUrl(CATEGORY_MEDIA_LABELS[normalizedType] || normalizedType, normalizedType);
+  return (
+    <span className={`category-badge media-badge ${size} ${CATEGORY_BADGES[normalizedType] || ''}`}>
+      <img src={mediaUrl} alt="" />
+    </span>
+  );
+}
+
 function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDraft }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -1034,12 +1169,7 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
         ) : null}
         {TEMPLATE_ORDER.map((item) => (
           <button key={item} type="button" className="workout-choice" onClick={() => onStart(item)}>
-            <span className={`category-badge ${CATEGORY_BADGES[item] || ''}`}>
-              {(() => {
-                const Icon = CATEGORY_ICONS[item] || Dumbbell;
-                return <Icon size={18} strokeWidth={2.4} />;
-              })()}
-            </span>
+            <CategoryMediaBadge type={item} />
             <span>{item}</span>
             <strong>
               <ArrowRight size={24} strokeWidth={2.4} />
@@ -1101,9 +1231,9 @@ function TimerPill({ secondsLeft, active, onReset }) {
   );
 }
 
-function ExerciseMediaThumbnail({ exercise, size = 'md' }) {
-  const url = getExerciseThumbnailUrl(exercise);
-  const media = getExerciseMedia(exercise);
+function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {} }) {
+  const url = getExerciseThumbnailUrl(exercise, mediaLibrary);
+  const media = getExerciseMedia(exercise, mediaLibrary);
   const label = media.machinePhotoThumbnailUrl ? 'Machine photo' : 'Exercise image';
 
   return (
@@ -1117,9 +1247,9 @@ function ExerciseMediaThumbnail({ exercise, size = 'md' }) {
   );
 }
 
-function ExerciseHeroMedia({ exercise }) {
-  const media = getExerciseMedia(exercise);
-  const demoUrl = getExerciseDemoUrl(exercise);
+function ExerciseHeroMedia({ exercise, mediaLibrary = {} }) {
+  const media = getExerciseMedia(exercise, mediaLibrary);
+  const demoUrl = getExerciseDemoUrl(exercise, mediaLibrary);
   const isVideo = Boolean(media.videoUrl || media.animationUrl);
 
   return (
@@ -1135,10 +1265,11 @@ function ExerciseHeroMedia({ exercise }) {
   );
 }
 
-function MachinePhotoUploader({ exercise, onChange }) {
+function MachinePhotoUploader({ exercise, mediaLibrary = {}, onChange }) {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const media = getExerciseMedia(exercise);
+  const media = getExerciseMedia(exercise, mediaLibrary);
+  const storedMedia = exercise.media || {};
   const inputId = `machine-photo-${exercise.id}`;
 
   const handleFileChange = async (event) => {
@@ -1151,7 +1282,7 @@ function MachinePhotoUploader({ exercise, onChange }) {
     try {
       const thumbnailUrl = await resizeMachinePhoto(file);
       onChange({
-        ...media,
+        ...storedMedia,
         mediaSource: 'user_photo',
         machinePhotoUrl: thumbnailUrl,
         machinePhotoThumbnailUrl: thumbnailUrl,
@@ -1171,7 +1302,7 @@ function MachinePhotoUploader({ exercise, onChange }) {
         <p>Use this to remember which exact machine you used.</p>
       </div>
       <div className="machine-photo-row">
-        <ExerciseMediaThumbnail exercise={exercise} size="lg" />
+        <ExerciseMediaThumbnail exercise={exercise} size="lg" mediaLibrary={mediaLibrary} />
         <div className="machine-photo-actions">
           <input id={inputId} className="sr-only" type="file" accept="image/*" onChange={handleFileChange} />
           <label className="file-button" htmlFor={inputId}>
@@ -1184,8 +1315,8 @@ function MachinePhotoUploader({ exercise, onChange }) {
               className="text-link inline-link"
               onClick={() =>
                 onChange({
-                  ...media,
-                  mediaSource: media.imageUrl || media.thumbnailUrl || media.videoUrl || media.animationUrl ? 'library' : 'custom',
+                  ...storedMedia,
+                  mediaSource: storedMedia.imageUrl || storedMedia.thumbnailUrl || storedMedia.videoUrl || storedMedia.animationUrl ? normalizeMediaSource(storedMedia.mediaSource, 'custom') : 'custom',
                   machinePhotoUrl: '',
                   machinePhotoThumbnailUrl: '',
                   machinePhotoUpdatedAt: '',
@@ -1204,10 +1335,60 @@ function MachinePhotoUploader({ exercise, onChange }) {
   );
 }
 
-function ExerciseDetailModal({ exercise, onClose, onMediaChange }) {
+function PlateCalculator({ exercise }) {
+  const [targetWeight, setTargetWeight] = useState('');
+  const [barWeight, setBarWeight] = useState('45');
+  if (normalizeTracking(exercise.tracking) !== 'weight/reps') return null;
+
+  const target = parseNumericValue(targetWeight);
+  const bar = parseNumericValue(barWeight) || 0;
+  const perSide = Number.isFinite(target) ? Math.max((target - bar) / 2, 0) : 0;
+  const plateSizes = [45, 35, 25, 10, 5, 2.5];
+  let remaining = perSide;
+  const plates = plateSizes
+    .map((plate) => {
+      const count = Math.floor((remaining + 0.001) / plate);
+      remaining -= count * plate;
+      return { plate, count };
+    })
+    .filter((item) => item.count > 0);
+
+  return (
+    <section className="plate-calculator">
+      <div>
+        <h4>Plate helper</h4>
+        <p>Quick barbell math for this lift.</p>
+      </div>
+      <div className="plate-input-row">
+        <label>
+          <span>Target</span>
+          <input inputMode="decimal" type="number" placeholder="135" value={targetWeight} onChange={(event) => setTargetWeight(event.target.value)} />
+        </label>
+        <label>
+          <span>Bar</span>
+          <input inputMode="decimal" type="number" value={barWeight} onChange={(event) => setBarWeight(event.target.value)} />
+        </label>
+      </div>
+      <div className="plate-result">
+        {Number.isFinite(target) && target > bar ? (
+          plates.length ? (
+            plates.map((item) => <span key={item.plate}>{item.count}x {item.plate}</span>)
+          ) : (
+            <span>Empty bar</span>
+          )
+        ) : (
+          <span>Enter a working weight</span>
+        )}
+        {Number.isFinite(target) && target > bar && remaining > 0.01 ? <small>plus {formatNumber(remaining, 2)} lb per side</small> : null}
+      </div>
+    </section>
+  );
+}
+
+function ExerciseDetailModal({ exercise, mediaLibrary = {}, onClose, onMediaChange }) {
   if (!exercise) return null;
   const meta = getExerciseMeta(exercise.name) || exercise;
-  const media = getExerciseMedia(exercise);
+  const media = getExerciseMedia(exercise, mediaLibrary);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -1221,11 +1402,12 @@ function ExerciseDetailModal({ exercise, onClose, onMediaChange }) {
             <X size={18} strokeWidth={2.4} />
           </button>
         </div>
-        <ExerciseHeroMedia exercise={exercise} />
+        <ExerciseHeroMedia exercise={exercise} mediaLibrary={mediaLibrary} />
         <div className="media-source-row">
           <span className="tiny-label">Demo media: {media.mediaSource.replace('_', ' ')}</span>
         </div>
-        <MachinePhotoUploader exercise={exercise} onChange={onMediaChange} />
+        <PlateCalculator exercise={exercise} />
+        <MachinePhotoUploader exercise={exercise} mediaLibrary={mediaLibrary} onChange={onMediaChange} />
       </div>
     </div>
   );
@@ -1234,10 +1416,13 @@ function ExerciseDetailModal({ exercise, onClose, onMediaChange }) {
 function ActiveWorkoutScreen({
   workout,
   workouts,
+  mediaLibrary,
+  favoriteExercises,
   saveStatus,
   exerciseRecords,
   lastPerformanceMap,
   onUpdate,
+  onToggleFavorite,
   onFinish,
   onSaveTemplate,
   timerActive,
@@ -1252,8 +1437,8 @@ function ActiveWorkoutScreen({
   const [showOneRepMaxInfo, setShowOneRepMaxInfo] = useState(false);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
   const exerciseOptions = useMemo(
-    () => getExerciseOptions(workouts, workout, exerciseFilter),
-    [workouts, workout, exerciseFilter],
+    () => getExerciseOptions(workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises),
+    [workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises],
   );
   const suggestions = useMemo(() => {
     const query = normalizeName(exerciseInput);
@@ -1416,6 +1601,7 @@ function ActiveWorkoutScreen({
               || exercise.sets.some((set) => String(set.weight || set.previousWeight || '').trim()));
           const fields = getExerciseFieldConfig(exercise, showAddedWeight);
           const trackingLabel = formatTrackingLabel(exercise.tracking);
+          const isFavorite = favoriteExercises.map(normalizeName).includes(normalizeName(exercise.name));
           return (
             <section key={exercise.id} className="exercise-card">
               <div className="exercise-card-top">
@@ -1425,7 +1611,7 @@ function ActiveWorkoutScreen({
                   onClick={() => setDetailExerciseId(exercise.id)}
                   aria-label={`Open media for ${exercise.name || 'exercise'}`}
                 >
-                  <ExerciseMediaThumbnail exercise={exercise} />
+                  <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} />
                 </button>
                 <div className="exercise-title-wrap">
                   <input
@@ -1451,6 +1637,14 @@ function ActiveWorkoutScreen({
                   </p>
                 </div>
                 <div className="exercise-actions">
+                  <button
+                    type="button"
+                    className={`icon-button ${isFavorite ? 'favorite-active' : ''}`}
+                    onClick={() => onToggleFavorite(exercise.name)}
+                    aria-label={isFavorite ? 'Remove favorite' : 'Favorite exercise'}
+                  >
+                    <Star size={16} strokeWidth={2.4} fill={isFavorite ? 'currentColor' : 'none'} />
+                  </button>
                   <button type="button" className="icon-button" onClick={() => setDetailExerciseId(exercise.id)} aria-label="Exercise media">
                     <Info size={16} strokeWidth={2.4} />
                   </button>
@@ -1550,7 +1744,7 @@ function ActiveWorkoutScreen({
       <section className="add-exercise-card">
         <label className="field-label" htmlFor="exercise-search">Add exercise</label>
         <div className="filter-row" aria-label="Exercise category filter">
-          {['All', normalizeWorkoutType(workout.type), 'Push', 'Pull', 'Legs', 'Core', 'Cardio']
+          {['All', 'Favorites', normalizeWorkoutType(workout.type), 'Push', 'Pull', 'Legs', 'Core', 'Cardio']
             .filter((item, index, items) => item && items.indexOf(item) === index)
             .map((item) => (
               <button
@@ -1586,7 +1780,7 @@ function ActiveWorkoutScreen({
         <div className="chip-row">
           {suggestions.map((exercise) => (
             <button key={exercise.name} type="button" className="chip rich-chip" onClick={() => addExercise(exercise.name, exercise)}>
-              <ExerciseMediaThumbnail exercise={exercise} size="sm" />
+              <ExerciseMediaThumbnail exercise={exercise} size="sm" mediaLibrary={mediaLibrary} />
               <span>
                 <strong>{exercise.name}</strong>
                 <small>{exercise.muscle} - {formatTrackingLabel(exercise.tracking)}</small>
@@ -1628,6 +1822,7 @@ function ActiveWorkoutScreen({
       ) : null}
       <ExerciseDetailModal
         exercise={detailExercise}
+        mediaLibrary={mediaLibrary}
         onClose={() => setDetailExerciseId(null)}
         onMediaChange={(media) => {
           if (detailExercise) updateExerciseMedia(detailExercise.id, media);
@@ -1691,7 +1886,6 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
       {visibleWorkouts.map((workout) => {
         const isOpen = expanded === workout.id;
         const displayType = normalizeWorkoutType(workout.type);
-        const TypeIcon = CATEGORY_ICONS[displayType] || Dumbbell;
         return (
           <div key={workout.id} className={`history-row ${swipedId === workout.id ? 'swiped' : ''}`}>
             <button
@@ -1714,14 +1908,13 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
               <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
                 <div>
                   <strong>
-                    <span className={`category-badge small ${CATEGORY_BADGES[displayType] || ''}`}>
-                      <TypeIcon size={12} strokeWidth={2.5} />
-                    </span>
+                    <CategoryMediaBadge type={displayType} size="sm" />
                     {formatShortDate(workout.date)} - {workout.label}
                   </strong>
                   <p className="history-time">
                     {displayType}
                     {formatTime(workout.startedAt) ? ` - ${formatTime(workout.startedAt)}` : ''}
+                    {workout.effortRating ? ` - Effort ${workout.effortRating}/10` : ''}
                   </p>
                   <p className="history-meta">
                     {workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' - ')}
@@ -1858,9 +2051,7 @@ function ChartsScreen({ workouts }) {
             <div className="control-block">
               <span><ListFilter size={15} strokeWidth={2.2} /> Category</span>
               <div className="filter-row">
-                {['All', ...CATEGORY_ORDER].map((item) => {
-                  const Icon = CATEGORY_ICONS[item] || Activity;
-                  return (
+                {['All', ...CATEGORY_ORDER].map((item) => (
                     <button
                       key={item}
                       type="button"
@@ -1870,13 +2061,10 @@ function ChartsScreen({ workouts }) {
                         setExerciseName('');
                       }}
                     >
-                      <span className={`category-badge small ${CATEGORY_BADGES[item] || ''}`}>
-                        <Icon size={12} strokeWidth={2.4} />
-                      </span>
+                      <CategoryMediaBadge type={item} size="sm" />
                       {item}
                     </button>
-                  );
-                })}
+                ))}
               </div>
             </div>
             <div className="control-grid">
@@ -2053,6 +2241,8 @@ export default function App() {
   const [workoutTemplates, setWorkoutTemplates] = useState(() => readTemplates());
   const [activeWorkout, setActiveWorkout] = useState(() => readActiveWorkout());
   const [saveStatus, setSaveStatus] = useState(() => (readActiveWorkout() ? 'saved' : 'idle'));
+  const [favoriteExercises, setFavoriteExercises] = useState(() => readFavoriteExercises());
+  const [mediaLibrary, setMediaLibrary] = useState(() => readCachedWgerMedia());
   const [showResumePrompt, setShowResumePrompt] = useState(() => Boolean(readActiveWorkout()));
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_REST_SECONDS);
   const [timerActive, setTimerActive] = useState(false);
@@ -2067,6 +2257,25 @@ export default function App() {
     saveTemplates(workoutTemplates);
   }, [workoutTemplates]);
 
+  useEffect(() => {
+    saveFavoriteExercises(favoriteExercises);
+  }, [favoriteExercises]);
+
+  useEffect(() => {
+    if (Object.keys(mediaLibrary).length) return undefined;
+    let cancelled = false;
+    fetchWgerExerciseMedia()
+      .then((media) => {
+        if (cancelled || !Object.keys(media).length) return;
+        saveCachedWgerMedia(media);
+        setMediaLibrary(media);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const exerciseRecords = useMemo(() => calculateExerciseRecords(workouts), [workouts]);
   const lastPerformanceMap = useMemo(() => getLastPerformanceMap(workouts), [workouts]);
 
@@ -2078,9 +2287,11 @@ export default function App() {
     }
 
     setSaveStatus(navigator.onLine === false ? 'pending' : 'saving');
-    saveActiveWorkout(activeWorkout);
-    setSaveStatus(navigator.onLine === false ? 'pending' : 'saved');
-    return undefined;
+    const saveTimer = window.setTimeout(() => {
+      saveActiveWorkout(activeWorkout);
+      setSaveStatus(navigator.onLine === false ? 'pending' : 'saved');
+    }, 220);
+    return () => window.clearTimeout(saveTimer);
   }, [activeWorkout]);
 
   useEffect(() => {
@@ -2192,7 +2403,9 @@ export default function App() {
       setShowResumePrompt(false);
       return;
     }
-    const completedWorkout = { ...activeWorkout, completedAt: nowValue() };
+    const effortInput = window.prompt('Effort rating for this workout? 1-10, optional:', activeWorkout.effortRating || '');
+    const effortRating = effortInput === null ? activeWorkout.effortRating || '' : String(effortInput || '').trim().slice(0, 2);
+    const completedWorkout = { ...activeWorkout, effortRating, completedAt: nowValue() };
     const nextWorkouts = [completedWorkout, ...workouts.filter((workout) => workout.id !== completedWorkout.id)];
     saveData({ workouts: nextWorkouts });
     setWorkouts(nextWorkouts);
@@ -2275,6 +2488,15 @@ export default function App() {
     );
   };
 
+  const toggleFavoriteExercise = (exerciseName) => {
+    const name = String(exerciseName || '').trim();
+    if (!name) return;
+    setFavoriteExercises((current) => {
+      const exists = current.some((item) => normalizeName(item) === normalizeName(name));
+      return exists ? current.filter((item) => normalizeName(item) !== normalizeName(name)) : [...current, name].sort((a, b) => a.localeCompare(b));
+    });
+  };
+
   const celebrateSet = (target) => {
     const rect = target?.getBoundingClientRect?.();
     const burst = {
@@ -2317,10 +2539,13 @@ export default function App() {
         <ActiveWorkoutScreen
           workout={activeWorkout}
           workouts={workouts}
+          mediaLibrary={mediaLibrary}
+          favoriteExercises={favoriteExercises}
           saveStatus={saveStatus}
           exerciseRecords={exerciseRecords}
           lastPerformanceMap={lastPerformanceMap}
           onUpdate={(nextWorkout) => (nextWorkout === null ? changeWorkout() : setActiveWorkout(nextWorkout))}
+          onToggleFavorite={toggleFavoriteExercise}
           onFinish={finishWorkout}
           onSaveTemplate={saveActiveWorkoutAsTemplate}
           timerActive={timerActive}
