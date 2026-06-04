@@ -71,6 +71,8 @@ const TEMPLATES = {
 };
 const DEFAULT_REST_SECONDS = 120;
 const HISTORY_PAGE_SIZE = 12;
+const MEDIA_SOURCES = ['library', 'generated', 'custom', 'user_photo'];
+const MACHINE_PHOTO_SIZE = 256;
 
 const EXERCISE_LIBRARY = [
   { name: 'Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
@@ -187,6 +189,79 @@ function normalizeWorkoutType(type) {
 function normalizeTracking(tracking) {
   const value = String(tracking || '').trim();
   return ['weight/reps', 'bodyweight', 'time', 'distance/time'].includes(value) ? value : 'weight/reps';
+}
+
+function normalizeMediaSource(source, fallback = 'library') {
+  return MEDIA_SOURCES.includes(source) ? source : fallback;
+}
+
+function normalizeExerciseMedia(exercise = {}, meta = null) {
+  const source = exercise.media || {};
+  const metaMedia = meta?.media || {};
+  const machinePhotoThumbnailUrl = exercise.machinePhotoThumbnailUrl || source.machinePhotoThumbnailUrl || '';
+  const machinePhotoUrl = exercise.machinePhotoUrl || source.machinePhotoUrl || machinePhotoThumbnailUrl;
+  const imageUrl = exercise.imageUrl || source.imageUrl || meta?.imageUrl || metaMedia.imageUrl || '';
+  const thumbnailUrl = exercise.thumbnailUrl || source.thumbnailUrl || meta?.thumbnailUrl || metaMedia.thumbnailUrl || imageUrl;
+  const videoUrl = exercise.videoUrl || source.videoUrl || meta?.videoUrl || metaMedia.videoUrl || '';
+  const animationUrl = exercise.animationUrl || source.animationUrl || meta?.animationUrl || metaMedia.animationUrl || '';
+  const mediaSource = normalizeMediaSource(
+    exercise.mediaSource || source.mediaSource || meta?.mediaSource || metaMedia.mediaSource,
+    imageUrl || thumbnailUrl || videoUrl || animationUrl ? 'library' : 'custom',
+  );
+
+  return {
+    imageUrl,
+    thumbnailUrl,
+    videoUrl,
+    animationUrl,
+    mediaSource,
+    machinePhotoUrl,
+    machinePhotoThumbnailUrl,
+    machinePhotoUpdatedAt: exercise.machinePhotoUpdatedAt || source.machinePhotoUpdatedAt || '',
+  };
+}
+
+function getExerciseMedia(exercise = {}) {
+  return normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name));
+}
+
+function getExerciseThumbnailUrl(exercise = {}) {
+  const media = getExerciseMedia(exercise);
+  return media.machinePhotoThumbnailUrl || media.thumbnailUrl || media.imageUrl || '';
+}
+
+function getExerciseDemoUrl(exercise = {}) {
+  const media = getExerciseMedia(exercise);
+  return media.videoUrl || media.animationUrl || media.imageUrl || media.thumbnailUrl || '';
+}
+
+function resizeMachinePhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file?.type?.startsWith('image/')) {
+      reject(new Error('Choose an image file.'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Could not load that image.'));
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = MACHINE_PHOTO_SIZE;
+        canvas.height = MACHINE_PHOTO_SIZE;
+        const context = canvas.getContext('2d');
+        const sourceSize = Math.min(image.width, image.height);
+        const sourceX = Math.max((image.width - sourceSize) / 2, 0);
+        const sourceY = Math.max((image.height - sourceSize) / 2, 0);
+        context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, MACHINE_PHOTO_SIZE, MACHINE_PHOTO_SIZE);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatNumber(value, fractionDigits = 0) {
@@ -379,6 +454,7 @@ function normalizeExercise(exercise = {}) {
   const normalizedSets = Array.isArray(exercise.sets)
     ? exercise.sets.map((set) => normalizeSet(set, tracking))
     : [];
+  const media = normalizeExerciseMedia(exercise, meta);
 
   return {
     id: exercise.id || createId(),
@@ -387,6 +463,7 @@ function normalizeExercise(exercise = {}) {
     type: normalizeWorkoutType(exercise.type || meta?.type || ''),
     equipment: exercise.equipment || meta?.equipment || '',
     tracking,
+    media,
     sets: normalizedSets.length ? normalizedSets : [createSetForTracking(tracking)],
   };
 }
@@ -573,6 +650,7 @@ function createTemplateFromWorkout(workout, name) {
         type: normalizeWorkoutType(exercise.type || getExerciseMeta(exercise.name)?.type || ''),
         equipment: exercise.equipment || getExerciseMeta(exercise.name)?.equipment || '',
         tracking: normalizeTracking(exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps'),
+        media: normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name)),
         setCount: Math.max((exercise.sets || []).length, 1),
         sets: (exercise.sets || []).map((set) => normalizeSet(set, exercise.tracking)),
       })),
@@ -596,6 +674,7 @@ function createWorkoutFromTemplate(template) {
       type: normalizeWorkoutType(exercise.type || getExerciseMeta(exercise.name)?.type || ''),
       equipment: exercise.equipment || getExerciseMeta(exercise.name)?.equipment || '',
       tracking: normalizeTracking(exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps'),
+      media: normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name)),
       sets: Array.from(
         { length: Math.max((exercise.sets || []).length || exercise.setCount || 1, 1) },
         (_, index) => createSetForTracking(exercise.tracking, exercise.sets?.[index]),
@@ -625,24 +704,24 @@ function findLastExerciseSets(workouts, currentWorkoutId, exerciseName) {
   return [];
 }
 
-function collectExerciseNames(workouts, activeWorkout) {
-  const names = new Set(EXERCISE_LIBRARY.map((exercise) => exercise.name));
+function collectExerciseEntries(workouts, activeWorkout) {
+  const byName = new Map(EXERCISE_LIBRARY.map((exercise) => [normalizeName(exercise.name), exercise]));
   workouts.forEach((workout) => {
     (workout.exercises || []).forEach((exercise) => {
-      if (exercise.name) names.add(exercise.name);
+      if (exercise.name) byName.set(normalizeName(exercise.name), normalizeExercise(exercise));
     });
   });
   (activeWorkout?.exercises || []).forEach((exercise) => {
-    if (exercise.name) names.add(exercise.name);
+    if (exercise.name) byName.set(normalizeName(exercise.name), normalizeExercise(exercise));
   });
-  return [...names].sort((a, b) => a.localeCompare(b));
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function getExerciseOptions(workouts, activeWorkout, category = 'All') {
   const normalizedCategory = normalizeWorkoutType(category);
   const library = EXERCISE_LIBRARY.filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
-  const used = collectExerciseNames(workouts, activeWorkout)
-    .map((name) => getExerciseMeta(name) || { name, muscle: 'Custom', type: 'Custom', equipment: 'Custom', tracking: 'weight/reps' })
+  const used = collectExerciseEntries(workouts, activeWorkout)
+    .map((exercise) => ({ ...(getExerciseMeta(exercise.name) || { muscle: 'Custom', type: 'Custom', equipment: 'Custom', tracking: 'weight/reps' }), ...exercise }))
     .filter((exercise) => normalizedCategory === 'All' || normalizeWorkoutType(exercise.type) === normalizedCategory);
   const byName = new Map([...library, ...used].map((exercise) => [normalizeName(exercise.name), exercise]));
   return [...byName.values()].sort((a, b) => {
@@ -1022,6 +1101,136 @@ function TimerPill({ secondsLeft, active, onReset }) {
   );
 }
 
+function ExerciseMediaThumbnail({ exercise, size = 'md' }) {
+  const url = getExerciseThumbnailUrl(exercise);
+  const media = getExerciseMedia(exercise);
+  const label = media.machinePhotoThumbnailUrl ? 'Machine photo' : 'Exercise image';
+
+  return (
+    <div className={`exercise-thumbnail ${size} ${url ? '' : 'placeholder'}`} aria-label={url ? label : 'No exercise image'}>
+      {url ? (
+        <img src={url} alt="" loading="lazy" />
+      ) : (
+        <Dumbbell size={size === 'sm' ? 15 : 20} strokeWidth={2.2} />
+      )}
+    </div>
+  );
+}
+
+function ExerciseHeroMedia({ exercise }) {
+  const media = getExerciseMedia(exercise);
+  const demoUrl = getExerciseDemoUrl(exercise);
+  const isVideo = Boolean(media.videoUrl || media.animationUrl);
+
+  return (
+    <div className={`exercise-hero-media ${demoUrl ? '' : 'placeholder'}`}>
+      {demoUrl && isVideo ? (
+        <video src={demoUrl} controls preload="metadata" />
+      ) : demoUrl ? (
+        <img src={demoUrl} alt="" loading="lazy" />
+      ) : (
+        <Dumbbell size={36} strokeWidth={2.1} />
+      )}
+    </div>
+  );
+}
+
+function MachinePhotoUploader({ exercise, onChange }) {
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
+  const media = getExerciseMedia(exercise);
+  const inputId = `machine-photo-${exercise.id}`;
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setStatus('loading');
+    setError('');
+    try {
+      const thumbnailUrl = await resizeMachinePhoto(file);
+      onChange({
+        ...media,
+        mediaSource: 'user_photo',
+        machinePhotoUrl: thumbnailUrl,
+        machinePhotoThumbnailUrl: thumbnailUrl,
+        machinePhotoUpdatedAt: nowValue(),
+      });
+      setStatus('saved');
+    } catch (uploadError) {
+      setError(uploadError.message || 'Could not use that photo.');
+      setStatus('error');
+    }
+  };
+
+  return (
+    <section className="machine-photo-section">
+      <div>
+        <h4>Machine photo</h4>
+        <p>Use this to remember which exact machine you used.</p>
+      </div>
+      <div className="machine-photo-row">
+        <ExerciseMediaThumbnail exercise={exercise} size="lg" />
+        <div className="machine-photo-actions">
+          <input id={inputId} className="sr-only" type="file" accept="image/*" onChange={handleFileChange} />
+          <label className="file-button" htmlFor={inputId}>
+            <FileUp size={16} strokeWidth={2.3} />
+            {media.machinePhotoThumbnailUrl ? 'Replace photo' : 'Add photo'}
+          </label>
+          {media.machinePhotoThumbnailUrl ? (
+            <button
+              type="button"
+              className="text-link inline-link"
+              onClick={() =>
+                onChange({
+                  ...media,
+                  mediaSource: media.imageUrl || media.thumbnailUrl || media.videoUrl || media.animationUrl ? 'library' : 'custom',
+                  machinePhotoUrl: '',
+                  machinePhotoThumbnailUrl: '',
+                  machinePhotoUpdatedAt: '',
+                })
+              }
+            >
+              Remove
+            </button>
+          ) : null}
+          {status === 'loading' ? <small>Processing photo...</small> : null}
+          {status === 'saved' ? <small>Saved as a 256px thumbnail.</small> : null}
+          {error ? <small className="upload-error">{error}</small> : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ExerciseDetailModal({ exercise, onClose, onMediaChange }) {
+  if (!exercise) return null;
+  const meta = getExerciseMeta(exercise.name) || exercise;
+  const media = getExerciseMedia(exercise);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="info-modal exercise-detail-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-header">
+          <div>
+            <h3 id="exercise-detail-title">{exercise.name || 'Exercise details'}</h3>
+            <p>{[meta.muscle, meta.equipment, formatTrackingLabel(exercise.tracking)].filter(Boolean).join(' - ')}</p>
+          </div>
+          <button type="button" className="sheet-close" aria-label="Close exercise details" onClick={onClose}>
+            <X size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+        <ExerciseHeroMedia exercise={exercise} />
+        <div className="media-source-row">
+          <span className="tiny-label">Demo media: {media.mediaSource.replace('_', ' ')}</span>
+        </div>
+        <MachinePhotoUploader exercise={exercise} onChange={onMediaChange} />
+      </div>
+    </div>
+  );
+}
+
 function ActiveWorkoutScreen({
   workout,
   workouts,
@@ -1041,6 +1250,7 @@ function ActiveWorkoutScreen({
   const [bodyweightWeightVisible, setBodyweightWeightVisible] = useState({});
   const [exerciseFilter, setExerciseFilter] = useState(normalizeWorkoutType(workout.type) === 'Custom' ? 'All' : normalizeWorkoutType(workout.type));
   const [showOneRepMaxInfo, setShowOneRepMaxInfo] = useState(false);
+  const [detailExerciseId, setDetailExerciseId] = useState(null);
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter),
     [workouts, workout, exerciseFilter],
@@ -1073,11 +1283,26 @@ function ActiveWorkoutScreen({
           type: normalizeWorkoutType(meta?.type || exercise.type || ''),
           equipment: meta?.equipment || exercise.equipment || '',
           tracking: nextTracking,
+          media: normalizeExerciseMedia({ ...exercise, name }, meta),
           sets: previousSets.length
             ? previousSets.map((set) => createPrefilledSetForTracking(nextTracking, set))
             : exercise.sets.map((set) => normalizeSet(set, nextTracking)),
         };
       }),
+    });
+  };
+
+  const updateExerciseMedia = (exerciseId, media) => {
+    onUpdate({
+      ...workout,
+      exercises: workout.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              media: normalizeExerciseMedia({ ...exercise, media }, getExerciseMeta(exercise.name)),
+            }
+          : exercise,
+      ),
     });
   };
 
@@ -1121,12 +1346,15 @@ function ActiveWorkoutScreen({
     });
   };
 
-  const addExercise = (name = '') => {
-    const finalName = name.trim();
+  const addExercise = (name = '', sourceExercise = null) => {
+    const finalName = String(name || '').trim();
     const previousSets = findLastExerciseSets(workouts, workout.id, finalName);
+    const option = sourceExercise || exerciseOptions.find((exercise) => normalizeName(exercise.name) === normalizeName(finalName));
+    const nextExercise = createExercise(finalName, previousSets);
+    nextExercise.media = normalizeExerciseMedia(option || nextExercise, getExerciseMeta(finalName));
     onUpdate({
       ...workout,
-      exercises: [...workout.exercises, createExercise(finalName, previousSets)],
+      exercises: [...workout.exercises, nextExercise],
     });
     setExerciseInput('');
   };
@@ -1159,6 +1387,8 @@ function ActiveWorkoutScreen({
     }
   };
 
+  const detailExercise = workout.exercises.find((exercise) => exercise.id === detailExerciseId);
+
   return (
     <div className="screen">
       <header className="session-header">
@@ -1189,6 +1419,14 @@ function ActiveWorkoutScreen({
           return (
             <section key={exercise.id} className="exercise-card">
               <div className="exercise-card-top">
+                <button
+                  type="button"
+                  className="exercise-thumbnail-button"
+                  onClick={() => setDetailExerciseId(exercise.id)}
+                  aria-label={`Open media for ${exercise.name || 'exercise'}`}
+                >
+                  <ExerciseMediaThumbnail exercise={exercise} />
+                </button>
                 <div className="exercise-title-wrap">
                   <input
                     className="exercise-title-input"
@@ -1213,6 +1451,9 @@ function ActiveWorkoutScreen({
                   </p>
                 </div>
                 <div className="exercise-actions">
+                  <button type="button" className="icon-button" onClick={() => setDetailExerciseId(exercise.id)} aria-label="Exercise media">
+                    <Info size={16} strokeWidth={2.4} />
+                  </button>
                   <button type="button" className="icon-button" onClick={() => moveExercise(index, -1)} aria-label="Move up">
                     <ArrowUp size={16} strokeWidth={2.4} />
                   </button>
@@ -1344,9 +1585,12 @@ function ActiveWorkoutScreen({
         </div>
         <div className="chip-row">
           {suggestions.map((exercise) => (
-            <button key={exercise.name} type="button" className="chip rich-chip" onClick={() => addExercise(exercise.name)}>
-              <span>{exercise.name}</span>
-              <small>{exercise.muscle} - {formatTrackingLabel(exercise.tracking)}</small>
+            <button key={exercise.name} type="button" className="chip rich-chip" onClick={() => addExercise(exercise.name, exercise)}>
+              <ExerciseMediaThumbnail exercise={exercise} size="sm" />
+              <span>
+                <strong>{exercise.name}</strong>
+                <small>{exercise.muscle} - {formatTrackingLabel(exercise.tracking)}</small>
+              </span>
             </button>
           ))}
         </div>
@@ -1382,6 +1626,13 @@ function ActiveWorkoutScreen({
           </div>
         </div>
       ) : null}
+      <ExerciseDetailModal
+        exercise={detailExercise}
+        onClose={() => setDetailExerciseId(null)}
+        onMediaChange={(media) => {
+          if (detailExercise) updateExerciseMedia(detailExercise.id, media);
+        }}
+      />
     </div>
   );
 }
