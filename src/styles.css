@@ -215,17 +215,6 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   height: 20px;
   border-radius: 7px;
 }
-.category-badge.media-badge {
-  padding: 2px;
-  overflow: hidden;
-}
-.category-badge.media-badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-  display: block;
-}
 .category-badge.push { background: linear-gradient(180deg, rgba(255, 107, 107, 0.35), rgba(229, 72, 77, 0.2)); }
 .category-badge.pull { background: linear-gradient(180deg, rgba(118, 168, 255, 0.28), rgba(118, 168, 255, 0.14)); }
 .category-badge.upper { background: linear-gradient(180deg, rgba(188, 154, 255, 0.28), rgba(188, 154, 255, 0.12)); }

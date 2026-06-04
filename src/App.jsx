@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowDown,
+  ArrowDownLeft,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Bike,
   CalendarRange,
   ChartColumn,
   CheckCircle2,
@@ -18,15 +20,20 @@ import {
   History,
   Info,
   ListFilter,
+  MoveHorizontal,
+  Footprints,
   Play,
   Plus,
   Save,
   Search,
+  Shield,
   SquarePen,
   Star,
   Timer,
   Trash2,
   TrendingUp,
+  Users,
+  Target,
   X,
 } from 'lucide-react';
 
@@ -69,18 +76,8 @@ const DEFAULT_REST_SECONDS = 120;
 const HISTORY_PAGE_SIZE = 12;
 const MEDIA_SOURCES = ['library', 'generated', 'custom', 'user_photo'];
 const MACHINE_PHOTO_SIZE = 256;
-const WGER_EXERCISE_INFO_URL = 'https://wger.de/api/v2/exerciseinfo/?language=2&limit=160';
+const WGER_EXERCISE_INFO_URL = 'https://wger.de/api/v2/exerciseinfo/?language=2&limit=400';
 const WGER_MEDIA_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 14;
-const CATEGORY_MEDIA_LABELS = {
-  Push: 'Chest',
-  Pull: 'Back',
-  Upper: 'Shoulders',
-  Legs: 'Quads',
-  'Full Body': 'Full',
-  Core: 'Core',
-  Cardio: 'Cardio',
-  Custom: 'Custom',
-};
 
 const EXERCISE_LIBRARY = [
   { name: 'Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
@@ -124,6 +121,18 @@ const EXERCISE_LIBRARY = [
   { name: 'Rowing Machine', muscle: 'Cardio', type: 'Cardio', equipment: 'Rower', tracking: 'distance/time' },
   { name: 'Stair Climber', muscle: 'Cardio', type: 'Cardio', equipment: 'Machine', tracking: 'time' },
 ];
+
+const CATEGORY_ICONS = {
+  Push: Target,
+  Pull: ArrowDownLeft,
+  Upper: Users,
+  Legs: Footprints,
+  'Full Body': MoveHorizontal,
+  Core: Shield,
+  Cardio: Bike,
+  Custom: SquarePen,
+  All: Activity,
+};
 
 const CATEGORY_BADGES = {
   Push: 'push',
@@ -192,67 +201,12 @@ function normalizeMediaSource(source, fallback = 'library') {
   return MEDIA_SOURCES.includes(source) ? source : fallback;
 }
 
-function encodeSvg(svg) {
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
-function getMuscleAccent(muscle = '', type = '') {
-  const key = normalizeName(muscle || type);
-  if (['chest', 'triceps', 'push'].includes(key)) return ['#ff777a', '#e5484d'];
-  if (['back', 'biceps', 'pull'].includes(key)) return ['#76a8ff', '#3d6ed8'];
-  if (['quads', 'hamstrings', 'glutes', 'calves', 'legs'].includes(key)) return ['#ffd166', '#d99d31'];
-  if (['core'].includes(key)) return ['#89d1ff', '#438fb8'];
-  if (['cardio'].includes(key)) return ['#ffa776', '#d66f3d'];
-  if (['shoulders', 'upper'].includes(key)) return ['#bc9aff', '#7b61d6'];
-  return ['#d5d9df', '#747e89'];
-}
-
-function createMuscleMediaDataUrl(muscle = 'Exercise', type = 'Custom') {
-  const [primary, secondary] = getMuscleAccent(muscle, type);
-  const label = String(muscle || type || 'Gym').slice(0, 10);
-  return encodeSvg(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop stop-color="#191d23"/>
-          <stop offset="1" stop-color="#0f1216"/>
-        </linearGradient>
-        <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-          <stop stop-color="${primary}"/>
-          <stop offset="1" stop-color="${secondary}"/>
-        </linearGradient>
-      </defs>
-      <rect width="256" height="256" rx="36" fill="url(#bg)"/>
-      <circle cx="54" cy="58" r="30" fill="${primary}" opacity=".18"/>
-      <circle cx="202" cy="198" r="40" fill="${secondary}" opacity=".14"/>
-      <g fill="none" stroke="url(#accent)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M72 142c18-34 42-52 72-52 19 0 35 7 48 20"/>
-        <path d="M64 162c25 18 51 27 78 27 23 0 42-6 58-18"/>
-        <path d="M92 96c-10 13-15 28-15 45"/>
-        <path d="M180 112c8 13 12 28 12 44"/>
-      </g>
-      <text x="128" y="224" fill="#f3f5f7" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" text-anchor="middle">${label}</text>
-    </svg>
-  `);
-}
-
-function getFallbackLibraryMedia(exercise = {}) {
-  if (!exercise.name && !exercise.muscle && !exercise.type) return {};
-  const imageUrl = createMuscleMediaDataUrl(exercise.muscle || CATEGORY_MEDIA_LABELS[normalizeWorkoutType(exercise.type)] || 'Exercise', exercise.type);
-  return {
-    imageUrl,
-    thumbnailUrl: imageUrl,
-    mediaSource: 'library',
-  };
-}
-
 function normalizeExerciseMedia(exercise = {}, meta = null, libraryMedia = {}, includeFallback = false) {
   const source = exercise.media || {};
   const metaMedia = meta?.media || {};
   const machinePhotoThumbnailUrl = exercise.machinePhotoThumbnailUrl || source.machinePhotoThumbnailUrl || '';
   const machinePhotoUrl = exercise.machinePhotoUrl || source.machinePhotoUrl || machinePhotoThumbnailUrl;
-  const fallbackMedia = includeFallback ? getFallbackLibraryMedia({ ...meta, ...exercise }) : {};
-  const imageUrl = exercise.imageUrl || source.imageUrl || meta?.imageUrl || metaMedia.imageUrl || libraryMedia.imageUrl || fallbackMedia.imageUrl || '';
+  const imageUrl = exercise.imageUrl || source.imageUrl || meta?.imageUrl || metaMedia.imageUrl || libraryMedia.imageUrl || '';
   const thumbnailUrl = exercise.thumbnailUrl || source.thumbnailUrl || meta?.thumbnailUrl || metaMedia.thumbnailUrl || libraryMedia.thumbnailUrl || imageUrl;
   const videoUrl = exercise.videoUrl || source.videoUrl || meta?.videoUrl || metaMedia.videoUrl || libraryMedia.videoUrl || '';
   const animationUrl = exercise.animationUrl || source.animationUrl || meta?.animationUrl || metaMedia.animationUrl || libraryMedia.animationUrl || '';
@@ -700,7 +654,9 @@ function saveCachedWgerMedia(media) {
 }
 
 function extractWgerImageUrl(image = {}) {
-  return image.image || image.url || image.original || image.thumbnail || image.image_url || '';
+  const rawUrl = image.image || image.url || image.original || image.thumbnail || image.image_url || '';
+  if (!rawUrl) return '';
+  return rawUrl.startsWith('http') ? rawUrl : `https://wger.de${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
 }
 
 function mapWgerExerciseMedia(results = []) {
@@ -1107,10 +1063,10 @@ function BottomNav({ tab, onChange }) {
 
 function CategoryMediaBadge({ type, size = 'md' }) {
   const normalizedType = normalizeWorkoutType(type);
-  const mediaUrl = createMuscleMediaDataUrl(CATEGORY_MEDIA_LABELS[normalizedType] || normalizedType, normalizedType);
+  const Icon = CATEGORY_ICONS[normalizedType] || Dumbbell;
   return (
-    <span className={`category-badge media-badge ${size} ${CATEGORY_BADGES[normalizedType] || ''}`}>
-      <img src={mediaUrl} alt="" />
+    <span className={`category-badge ${size} ${CATEGORY_BADGES[normalizedType] || ''}`}>
+      <Icon size={size === 'sm' ? 12 : 18} strokeWidth={2.4} />
     </span>
   );
 }
@@ -1232,14 +1188,16 @@ function TimerPill({ secondsLeft, active, onReset }) {
 }
 
 function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {} }) {
+  const [failedUrl, setFailedUrl] = useState('');
   const url = getExerciseThumbnailUrl(exercise, mediaLibrary);
+  const visibleUrl = url && url !== failedUrl ? url : '';
   const media = getExerciseMedia(exercise, mediaLibrary);
   const label = media.machinePhotoThumbnailUrl ? 'Machine photo' : 'Exercise image';
 
   return (
-    <div className={`exercise-thumbnail ${size} ${url ? '' : 'placeholder'}`} aria-label={url ? label : 'No exercise image'}>
-      {url ? (
-        <img src={url} alt="" loading="lazy" />
+    <div className={`exercise-thumbnail ${size} ${visibleUrl ? '' : 'placeholder'}`} aria-label={visibleUrl ? label : 'No exercise image'}>
+      {visibleUrl ? (
+        <img src={visibleUrl} alt="" loading="lazy" onError={() => setFailedUrl(visibleUrl)} />
       ) : (
         <Dumbbell size={size === 'sm' ? 15 : 20} strokeWidth={2.2} />
       )}
@@ -1248,16 +1206,18 @@ function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {} }) {
 }
 
 function ExerciseHeroMedia({ exercise, mediaLibrary = {} }) {
+  const [failedUrl, setFailedUrl] = useState('');
   const media = getExerciseMedia(exercise, mediaLibrary);
   const demoUrl = getExerciseDemoUrl(exercise, mediaLibrary);
+  const visibleUrl = demoUrl && demoUrl !== failedUrl ? demoUrl : '';
   const isVideo = Boolean(media.videoUrl || media.animationUrl);
 
   return (
-    <div className={`exercise-hero-media ${demoUrl ? '' : 'placeholder'}`}>
-      {demoUrl && isVideo ? (
-        <video src={demoUrl} controls preload="metadata" />
-      ) : demoUrl ? (
-        <img src={demoUrl} alt="" loading="lazy" />
+    <div className={`exercise-hero-media ${visibleUrl ? '' : 'placeholder'}`}>
+      {visibleUrl && isVideo ? (
+        <video src={visibleUrl} controls preload="metadata" onError={() => setFailedUrl(visibleUrl)} />
+      ) : visibleUrl ? (
+        <img src={visibleUrl} alt="" loading="lazy" onError={() => setFailedUrl(visibleUrl)} />
       ) : (
         <Dumbbell size={36} strokeWidth={2.1} />
       )}
@@ -2179,9 +2139,25 @@ function MiniChart({ points, metricLabel, metricId }) {
   );
 }
 
-function BackupScreen({ workouts, templates, onImport, onReset }) {
+function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, onImport, onReset }) {
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ workouts, templates }, null, 2)], { type: 'application/json' });
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            version: 2,
+            exportedAt: nowValue(),
+            workouts,
+            templates,
+            activeWorkout,
+            favoriteExercises,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: 'application/json' },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -2209,7 +2185,8 @@ function BackupScreen({ workouts, templates, onImport, onReset }) {
       <section className="backup-card">
         <div className="backup-copy">
           <p>Your workouts are saved in this browser on this device, so they should stay here as long as you keep using the same iPhone and browser and do not clear website data.</p>
-          <p>Export creates a backup JSON file you can keep in Files or iCloud. Import restores workouts from that file if you ever lose local browser data or move to another device.</p>
+          <p>Export creates a backup JSON file you can keep in Files or iCloud. Import restores workouts, templates, favorites, and your active draft.</p>
+          <p>Machine photos are saved inside that backup as small compressed image data, so camera-added thumbnails can come back on import.</p>
           <p>Clearing Safari website data, removing browser app data, or switching phones without restoring that browser data can remove your saved workouts. Normal app updates and page refreshes should not delete them.</p>
         </div>
         <div className="backup-actions">
@@ -2424,9 +2401,13 @@ export default function App() {
       if (!Array.isArray(parsed.workouts)) throw new Error('Invalid backup file');
       setWorkouts(parsed.workouts.map((workout) => normalizeWorkout(workout)));
       setWorkoutTemplates(Array.isArray(parsed.templates) ? parsed.templates.map((template) => normalizeTemplate(template)) : []);
-      setActiveWorkout(null);
-      saveActiveWorkout(null);
-      setShowResumePrompt(false);
+      const restoredActiveWorkout = parsed.activeWorkout && Array.isArray(parsed.activeWorkout.exercises)
+        ? normalizeWorkout(parsed.activeWorkout)
+        : null;
+      setFavoriteExercises(Array.isArray(parsed.favoriteExercises) ? parsed.favoriteExercises.filter(Boolean) : []);
+      setActiveWorkout(restoredActiveWorkout);
+      saveActiveWorkout(restoredActiveWorkout);
+      setShowResumePrompt(Boolean(restoredActiveWorkout));
       setTab('History');
     } catch {
       window.alert('Could not import that backup file.');
@@ -2515,6 +2496,8 @@ export default function App() {
     if (!window.confirm('Delete all saved workouts from this device? This cannot be undone unless you exported a backup first.')) return;
     setWorkouts([]);
     setWorkoutTemplates([]);
+    setFavoriteExercises([]);
+    setMediaLibrary({});
     setActiveWorkout(null);
     saveActiveWorkout(null);
     setShowResumePrompt(false);
@@ -2523,6 +2506,8 @@ export default function App() {
     setSecondsLeft(DEFAULT_REST_SECONDS);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(WORKOUT_TEMPLATES_KEY);
+    localStorage.removeItem(FAVORITE_EXERCISES_KEY);
+    localStorage.removeItem(WGER_MEDIA_CACHE_KEY);
     setTab('Workout');
   };
 
@@ -2582,7 +2567,14 @@ export default function App() {
     ) : tab === 'Charts' ? (
       <ChartsScreen workouts={workouts} />
     ) : (
-      <BackupScreen workouts={workouts} templates={workoutTemplates} onImport={importText} onReset={resetData} />
+      <BackupScreen
+        workouts={workouts}
+        templates={workoutTemplates}
+        activeWorkout={activeWorkout}
+        favoriteExercises={favoriteExercises}
+        onImport={importText}
+        onReset={resetData}
+      />
     );
 
   return (
