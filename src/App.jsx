@@ -1126,7 +1126,7 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
         {TEMPLATE_ORDER.map((item) => (
           <button key={item} type="button" className="workout-choice" onClick={() => onStart(item)}>
             <CategoryMediaBadge type={item} />
-            <span>{item}</span>
+            <span className="workout-choice-label">{item}</span>
             <strong>
               <ArrowRight size={24} strokeWidth={2.4} />
             </strong>

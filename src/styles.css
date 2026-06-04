@@ -200,6 +200,7 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 .category-badge {
   width: 36px;
   height: 36px;
+  min-width: 36px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.08);
   background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03));
@@ -208,11 +209,15 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   justify-content: center;
   color: white;
   flex-shrink: 0;
+  flex-grow: 0;
+  flex-basis: 36px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .category-badge.small {
   width: 20px;
   height: 20px;
+  min-width: 20px;
+  flex-basis: 20px;
   border-radius: 7px;
 }
 .category-badge.push { background: linear-gradient(180deg, rgba(255, 107, 107, 0.35), rgba(229, 72, 77, 0.2)); }
@@ -231,7 +236,7 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   align-items: center;
   justify-content: center;
 }
-.workout-choice > span { flex: 1; text-align: left; }
+.workout-choice-label { flex: 1; text-align: left; }
 .text-link {
   background: transparent;
   border: none;
