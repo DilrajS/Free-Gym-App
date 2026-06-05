@@ -2179,6 +2179,32 @@ h2 { font-size: 1.5rem; }
     rgba(20, 24, 32, 0.95);
 }
 
+.home-brand {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 10px 0 2px;
+  text-align: center;
+}
+
+.home-brand-icon {
+  width: 86px;
+  height: 86px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.home-brand h1 {
+  font-size: clamp(2.55rem, 9vw, 3.25rem);
+}
+
+.home-draft-actions {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 360px);
+  margin-top: 6px;
+}
+
 .today-card-copy {
   display: grid;
   gap: 8px;
@@ -2191,11 +2217,6 @@ h2 { font-size: 1.5rem; }
 .today-card-copy p {
   color: #d7dee7;
   font-size: 1rem;
-}
-
-.today-suggestion {
-  color: var(--action-strong);
-  font-weight: 800;
 }
 
 .today-card-actions {
@@ -2220,7 +2241,7 @@ h2 { font-size: 1.5rem; }
 }
 
 .workout-type-card {
-  min-height: 104px;
+  min-height: 88px;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2228,7 +2249,7 @@ h2 { font-size: 1.5rem; }
   color: var(--text);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 10px;
   text-align: left;
   box-shadow: none;
@@ -2256,17 +2277,6 @@ h2 { font-size: 1.5rem; }
   color: var(--muted);
   line-height: 1.25;
 }
-
-.status-dot-label {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.status-dot-label.ready { color: var(--action-strong); }
-.status-dot-label.recovering { color: var(--amber); }
-.status-dot-label.fatigued { color: var(--accent-strong); }
 
 .dashboard-preview {
   gap: 24px;
@@ -2300,27 +2310,7 @@ h2 { font-size: 1.5rem; }
 .recovery-mockup-head h2 {
   font-size: clamp(1.55rem, 5.5vw, 2rem);
   text-shadow: none;
-  margin-bottom: 10px;
-}
-
-.recovery-summary-lines {
-  display: grid;
-  gap: 7px;
-}
-
-.recovery-summary-lines p {
-  align-items: flex-start;
-  color: #d9e1eb;
-  font-size: 0.92rem;
-}
-
-.recovery-summary-lines p svg:first-child {
-  margin-top: 2px;
-}
-
-.recovery-summary-lines p + p svg,
-.recovery-summary-lines p + p strong {
-  color: var(--amber);
+  margin-bottom: 0;
 }
 
 .anatomy-stage,

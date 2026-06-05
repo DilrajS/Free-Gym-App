@@ -46,6 +46,7 @@ const FAVORITE_EXERCISES_KEY = `${STORAGE_KEY}-favorite-exercises`;
 const WGER_MEDIA_CACHE_KEY = `${STORAGE_KEY}-wger-media`;
 const APPLE_WATCH_REMINDER_KEY = `${STORAGE_KEY}-apple-watch-reminder`;
 const RECOVERY_DAYS_KEY = `${STORAGE_KEY}-recovery-days`;
+const APP_ICON_URL = `${import.meta.env.BASE_URL}icons/icon-180.png`;
 const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Settings'];
 const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
 const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
@@ -225,12 +226,30 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function todayValue() {
-  return new Date().toISOString().slice(0, 10);
+  return formatDateKey(new Date());
 }
 
 function nowValue() {
   return new Date().toISOString();
+}
+
+function getTimestampDateKey(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return formatDateKey(date);
+}
+
+function getWorkoutLogDate(workout = {}) {
+  return getTimestampDateKey(workout.startedAt) || workout.date || todayValue();
 }
 
 function formatLongDate(value) {
@@ -574,7 +593,7 @@ function normalizeWorkout(workout = {}) {
   return {
     ...workout,
     id: workout.id || createId(),
-    date: workout.date || todayValue(),
+    date: getWorkoutLogDate(workout),
     startedAt: workout.startedAt || nowValue(),
     type: normalizedType,
     label: normalizedLabel,
@@ -1166,7 +1185,7 @@ function getLocalDateFromKey(dateKey) {
 }
 
 function getDateKey(date) {
-  return date.toISOString().slice(0, 10);
+  return formatDateKey(date);
 }
 
 function addDays(date, days) {
@@ -1217,36 +1236,16 @@ function formatRelativeDate(dateKey) {
   return formatShortDate(dateKey).replace(/, \d{4}/, '');
 }
 
-function getWorkoutTypeInsights(workouts = [], recovery = []) {
-  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
+function getWorkoutTypeInsights(workouts = []) {
   return TEMPLATE_ORDER.map((type) => {
     const lastWorkout = [...workouts]
       .filter((workout) => normalizeWorkoutType(workout.type) === type)
       .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))[0];
-    const templateMuscles = uniqueValues(
-      (TEMPLATES[type] || [])
-        .map((exerciseName) => getExerciseMeta(exerciseName)?.muscle)
-        .flatMap((muscle) => getExerciseRecoveryMuscles({ muscle })),
-    );
-    const states = templateMuscles.map((muscle) => recoveryByMuscle.get(muscle)?.state || 'inactive');
-    const trainedToday = Boolean(lastWorkout?.date === todayValue()) || states.includes('fatigued');
-    const recoveringCount = states.filter((state) => state === 'recovering').length;
-    const readyCount = states.filter((state) => state === 'ready').length;
-    const status = trainedToday
-      ? { label: 'Trained today', tone: 'fatigued' }
-      : recoveringCount > readyCount
-        ? { label: 'Recovering', tone: 'recovering' }
-        : recoveringCount > 0
-          ? { label: 'Mostly ready', tone: 'recovering' }
-          : { label: 'Ready', tone: 'ready' };
 
     return {
       type,
       lastWorkout,
       lastText: lastWorkout ? `Last trained ${formatRelativeDate(lastWorkout.date)}` : 'No recent workout',
-      status,
-      readyCount,
-      recoveringCount,
     };
   });
 }
@@ -1258,22 +1257,10 @@ function getRecoveryOverview(workouts = [], recoveryDays = DEFAULT_RECOVERY_DAYS
   const fatigued = recovery.filter((item) => item.state === 'fatigued');
   const tracked = recovery.filter((item) => item.lastTrainedDate);
   const recoveredPercent = tracked.length
-    ? Math.round((tracked.reduce((total, item) => total + item.recoveryPercent, 0) / tracked.length) * 100)
+    ? Math.round(tracked.reduce((total, item) => total + item.recoveryPercent, 0) / tracked.length)
     : null;
 
   return { recovery, ready, recovering, fatigued, recoveredPercent };
-}
-
-function getSuggestedWorkout(insights = []) {
-  const candidates = insights.filter((item) => item.type !== 'Cardio' && item.status.tone !== 'fatigued');
-  const scored = (candidates.length ? candidates : insights).map((item) => ({
-    ...item,
-    score:
-      (item.status.tone === 'ready' ? 30 : item.status.tone === 'recovering' ? 12 : 0)
-      + item.readyCount * 4
-      + (item.lastWorkout ? Math.min(getDayDifference(item.lastWorkout.date), 14) : 14),
-  }));
-  return scored.sort((a, b) => b.score - a.score)[0] || insights[0] || { type: 'Push' };
 }
 
 function getWorkoutStats(workouts = []) {
@@ -1780,10 +1767,15 @@ function WorkoutConsistencyCalendar({ workouts }) {
     const node = scrollRef.current;
     if (!node) return undefined;
     const frame = window.requestAnimationFrame(() => {
-      node.scrollLeft = node.scrollWidth;
+      const todayNode = node.querySelector('.consistency-day.today');
+      if (!todayNode) {
+        node.scrollLeft = node.scrollWidth;
+        return;
+      }
+      node.scrollLeft = Math.max(0, todayNode.offsetLeft + todayNode.offsetWidth - node.clientWidth + 16);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [weekCount]);
+  }, [calendarDays.length, weekCount]);
 
   return (
     <section className="dashboard-card consistency-card">
@@ -1841,27 +1833,6 @@ function WorkoutConsistencyCalendar({ workouts }) {
   );
 }
 
-function RecoveryInlineLegend() {
-  const legendItems = [
-    { state: 'ready', label: 'Ready' },
-    { state: 'recovering', label: 'Recovering' },
-    { state: 'fatigued', label: 'Trained today' },
-  ];
-
-  return (
-    <div className="recovery-map-legend" aria-label="Recovery color legend">
-      {legendItems.map((item) => (
-        <span key={item.state} className="recovery-map-legend-item">
-          <i className={item.state} />
-          <span>
-            <strong>{item.label}</strong>
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
   const renderBody = (side) => (
     <div className="muscle-body-panel">
@@ -1892,7 +1863,6 @@ function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
         {renderBody('front')}
         {renderBody('back')}
       </div>
-      <RecoveryInlineLegend />
     </div>
   );
 }
@@ -1902,10 +1872,8 @@ function MuscleRecoveryCard({ workouts }) {
   const [selectedMuscle, setSelectedMuscle] = useState(null);
   const [recoveryDays, setRecoveryDays] = useState(() => readRecoveryDays());
   const overview = useMemo(() => getRecoveryOverview(workouts, recoveryDays), [workouts, recoveryDays]);
-  const { recovery, ready, recovering, recoveredPercent } = overview;
+  const { recovery, recoveredPercent } = overview;
   const selected = recovery.find((item) => item.muscle === selectedMuscle);
-  const readyText = ready.length ? ready.slice(0, 4).map((item) => item.muscle).join(' | ') : 'Log workouts to build recovery history';
-  const recoveringText = recovering.length ? recovering.slice(0, 4).map((item) => item.muscle).join(' | ') : 'None';
   const recoveryHeadline = recoveredPercent === null
     ? 'Recovery builds as you log'
     : recoveredPercent >= 85
@@ -1922,18 +1890,6 @@ function MuscleRecoveryCard({ workouts }) {
         <div className="recovery-title-block">
           <span className="premium-eyebrow">Recovery</span>
           <h2>{recoveryHeadline}</h2>
-          <div className="recovery-summary-lines">
-            <p>
-              <CheckCircle2 size={18} strokeWidth={2.6} />
-              <strong>Ready:</strong>
-              <span>{readyText}</span>
-            </p>
-            <p>
-              <Timer size={18} strokeWidth={2.4} />
-              <strong>Recovering:</strong>
-              <span>{recoveringText}</span>
-            </p>
-          </div>
         </div>
         <div className="recovery-head-actions">
           <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
@@ -2068,48 +2024,28 @@ function PhotoPreviewModal({ exercise, mediaLibrary = {}, onClose }) {
   );
 }
 
-function TodayActionCard({ draftWorkout, suggestedWorkout, readyMuscles, onStart, onResumeDraft, onDiscardDraft }) {
-  const readyText = readyMuscles.length
-    ? readyMuscles.slice(0, 4).map((item) => item.muscle).join(' | ')
-    : 'Start logging to build recovery guidance';
-  const label = suggestedWorkout?.type || 'Push';
-
+function HomeBrandHeader({ draftWorkout, onResumeDraft, onDiscardDraft }) {
   return (
-    <section className="today-card">
-      <div className="today-card-copy">
-        <span className="eyebrow">Today</span>
-        <h1>{draftWorkout ? 'Continue last workout' : 'Ready to train'}</h1>
-        <p>{draftWorkout ? draftWorkout.label || 'Unfinished workout' : readyText}</p>
-        {draftWorkout ? (
-          <span className="today-suggestion">{formatLongDate(draftWorkout.date)}</span>
-        ) : (
-          <span className="today-suggestion">Suggested: {label}</span>
-        )}
-      </div>
-      <div className="today-card-actions">
-        {draftWorkout ? (
-          <>
-            <button type="button" className="primary-button today-primary" onClick={onResumeDraft}>
-              <Play size={18} strokeWidth={2.4} />
-              Continue Workout
-            </button>
-            <button type="button" className="text-link inline-link danger-link" onClick={onDiscardDraft}>
-              Discard draft
-            </button>
-          </>
-        ) : (
-          <button type="button" className="primary-button today-primary" onClick={() => onStart(label)}>
+    <section className="home-brand" aria-label="Gym Log">
+      <img className="home-brand-icon" src={APP_ICON_URL} alt="" />
+      <h1>Gym Log</h1>
+      {draftWorkout ? (
+        <div className="home-draft-actions">
+          <button type="button" className="primary-button today-primary" onClick={onResumeDraft}>
             <Play size={18} strokeWidth={2.4} />
-            Start Workout
+            Continue Workout
           </button>
-        )}
-      </div>
+          <button type="button" className="text-link inline-link danger-link" onClick={onDiscardDraft}>
+            Discard draft
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function WorkoutTypeCard({ insight, onStart }) {
-  const { type, lastText, status } = insight;
+  const { type, lastText } = insight;
   return (
     <button type="button" className="workout-type-card" onClick={() => onStart(type)}>
       <CategoryMediaBadge type={type} />
@@ -2117,7 +2053,6 @@ function WorkoutTypeCard({ insight, onStart }) {
         <strong>{type}</strong>
         <small>{lastText}</small>
       </span>
-      <span className={`status-dot-label ${status.tone}`}>{status.label}</span>
     </button>
   );
 }
@@ -2126,13 +2061,10 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const customSheetRef = useRef(null);
-  const recoveryDays = useMemo(() => readRecoveryDays(), []);
-  const recoveryOverview = useMemo(() => getRecoveryOverview(workouts, recoveryDays), [workouts, recoveryDays]);
   const workoutInsights = useMemo(
-    () => getWorkoutTypeInsights(workouts, recoveryOverview.recovery),
-    [workouts, recoveryOverview.recovery],
+    () => getWorkoutTypeInsights(workouts),
+    [workouts],
   );
-  const suggestedWorkout = useMemo(() => getSuggestedWorkout(workoutInsights), [workoutInsights]);
 
   useEffect(() => {
     if (!showCustom) return;
@@ -2141,11 +2073,8 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
 
   return (
     <div className="screen screen-home">
-      <TodayActionCard
+      <HomeBrandHeader
         draftWorkout={draftWorkout}
-        suggestedWorkout={suggestedWorkout}
-        readyMuscles={recoveryOverview.ready}
-        onStart={onStart}
         onResumeDraft={onResumeDraft}
         onDiscardDraft={onDiscardDraft}
       />
