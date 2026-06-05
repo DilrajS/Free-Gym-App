@@ -643,6 +643,34 @@ p {
   background: linear-gradient(180deg, rgba(229,72,77,0.34), rgba(229,72,77,0.16));
   box-shadow: 0 8px 18px rgba(229,72,77,0.18), inset 0 1px 0 rgba(255,255,255,0.08);
 }
+.recovery-advanced {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 12px;
+}
+.recovery-advanced summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 820;
+  list-style-position: inside;
+}
+.recovery-advanced-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.035);
+}
+.recovery-advanced-panel strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.recovery-advanced-panel p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
 .anatomy-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 168px;
@@ -1628,8 +1656,8 @@ p {
     font-size: 0.94rem;
   }
   .recovery-head-actions {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-self: end;
   }
   .recovery-days-toggle {
     flex: 1;
@@ -1946,8 +1974,8 @@ p {
     gap: 12px;
   }
   .recovery-head-actions {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-self: end;
   }
   .recovery-days-toggle {
     flex: 1;

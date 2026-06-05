@@ -1320,26 +1320,52 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   const name = normalizeName(exercise.name);
   const muscle = exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '';
   const groups = [];
-  const isLowerBodyMovement =
-    ['Quads', 'Hamstrings', 'Glutes', 'Calves'].includes(muscle) ||
-    /leg press|leg extension|leg curl|hamstring curl|nordic|squat|lunge|split squat|step up|calf|hip thrust|glute|kickback|abduction|adduction|romanian|stiff leg/.test(name);
 
-  if (/bench|incline|decline|chest|fly|pec|crossover|push up|pullover|dip/.test(name) || muscle === 'Chest') groups.push('Chest / pecs');
-  if (/shrug|upright row|face pull|deadlift|clean|farmer|carry/.test(name)) groups.push('Traps');
-  if (/pull up|chin up|pulldown|row|deadlift|back extension|pullover|clean|sled|kettlebell/.test(name) || muscle === 'Back') groups.push('Lats / upper back');
-  if (/shoulder press|overhead press|arnold|front raise|bench|incline|push up|clean and press/.test(name)) groups.push('Front delts');
-  if (/lateral raise|upright row|shoulder press|arnold|machine shoulder/.test(name)) groups.push('Side delts');
-  if (/rear delt|face pull|reverse pec|row/.test(name)) groups.push('Rear delts');
-  if ((!isLowerBodyMovement && /bicep|barbell curl|ez bar curl|hammer curl|preacher curl|incline dumbbell curl|cable curl|concentration curl|chin up|pull up|pulldown|row/.test(name)) || muscle === 'Biceps') groups.push('Biceps');
-  if ((!isLowerBodyMovement && /tricep|skull|dip|bench|chest press|shoulder press|overhead press|push up|close grip|rope pushdown|pushdown|tricep extension/.test(name)) || muscle === 'Triceps') groups.push('Triceps');
-  if ((!isLowerBodyMovement && /hammer curl|reverse curl|wrist|farmer|carry|grip|forearm|deadlift|shrug/.test(name)) || muscle === 'Forearms') groups.push('Forearms');
-  if (/plank|crunch|knee raise|leg raise|dead bug|pallof|core|ab|sit up|twist|wood chop|rollout|slam/.test(name) || muscle === 'Core') groups.push('Abs / core');
-  if (/hip thrust|glute|kickback|deadlift|squat|leg press|lunge|split squat|step up|abduction|swing|sled/.test(name) || muscle === 'Glutes') groups.push('Glutes');
-  if (/squat|leg press|leg extension|lunge|split squat|step up|quad|sled/.test(name) || muscle === 'Quads') groups.push('Quads');
-  if (/romanian|stiff leg|deadlift|leg curl|hamstring|nordic|swing/.test(name) || muscle === 'Hamstrings') groups.push('Hamstrings');
-  if (/calf/.test(name) || muscle === 'Calves') groups.push('Calves');
-  if (muscle === 'Shoulders' && !groups.some((group) => group.includes('delts'))) groups.push('Front delts');
-  if (muscle === 'Full Body') groups.push('Traps', 'Lats / upper back', 'Abs / core', 'Glutes', 'Quads', 'Hamstrings');
+  if (muscle === 'Chest') {
+    groups.push('Chest / pecs');
+    if (/bench|chest press|push up|dip/.test(name)) groups.push('Front delts', 'Triceps');
+    if (/pullover/.test(name)) groups.push('Lats / upper back');
+  } else if (muscle === 'Back') {
+    groups.push('Lats / upper back');
+    if (/pull up|chin up|pulldown|row/.test(name)) groups.push('Biceps');
+    if (/row|face pull/.test(name)) groups.push('Rear delts');
+    if (/shrug|deadlift|trap bar/.test(name)) groups.push('Traps', 'Forearms');
+    if (/deadlift|trap bar/.test(name)) groups.push('Glutes', 'Hamstrings');
+  } else if (muscle === 'Shoulders') {
+    if (/rear delt|reverse pec|face pull/.test(name)) groups.push('Rear delts');
+    if (/lateral raise|upright row|arnold|shoulder press|overhead press|machine shoulder/.test(name)) groups.push('Side delts');
+    if (/front raise|shoulder press|overhead press|arnold|machine shoulder/.test(name)) groups.push('Front delts');
+    if (/shoulder press|overhead press|arnold|machine shoulder/.test(name)) groups.push('Triceps');
+    if (/upright row|face pull/.test(name)) groups.push('Traps');
+  } else if (muscle === 'Biceps') {
+    groups.push('Biceps');
+    if (/hammer curl|reverse curl/.test(name)) groups.push('Forearms');
+  } else if (muscle === 'Triceps') {
+    groups.push('Triceps');
+    if (/close grip bench|dip/.test(name)) groups.push('Chest / pecs', 'Front delts');
+  } else if (muscle === 'Forearms') {
+    groups.push('Forearms');
+    if (/farmer|carry/.test(name)) groups.push('Traps');
+  } else if (muscle === 'Core') {
+    groups.push('Abs / core');
+  } else if (muscle === 'Quads') {
+    groups.push('Quads');
+    if (/squat|leg press|lunge|split squat|step up/.test(name) && !/calf raise/.test(name)) groups.push('Glutes');
+  } else if (muscle === 'Hamstrings') {
+    groups.push('Hamstrings');
+    if (/romanian|stiff leg|deadlift|swing/.test(name)) groups.push('Glutes');
+  } else if (muscle === 'Glutes') {
+    groups.push('Glutes');
+  } else if (muscle === 'Calves') {
+    groups.push('Calves');
+  } else if (muscle === 'Full Body') {
+    groups.push('Abs / core');
+    if (/sled/.test(name)) groups.push('Quads', 'Glutes', 'Calves');
+    if (/kettlebell swing/.test(name)) groups.push('Glutes', 'Hamstrings');
+    if (/clean/.test(name)) groups.push('Traps', 'Quads', 'Glutes', 'Hamstrings');
+    if (/press/.test(name)) groups.push('Front delts', 'Side delts', 'Triceps');
+    if (/slam/.test(name)) groups.push('Front delts', 'Lats / upper back');
+  }
 
   return uniqueValues(groups).filter((group) => RECOVERY_MUSCLES.includes(group));
 }
@@ -1693,18 +1719,6 @@ function MuscleRecoveryCard({ workouts }) {
           </p>
         </div>
         <div className="recovery-head-actions">
-          <div className="recovery-days-toggle" aria-label="Recovery time">
-            {[1, 2].map((days) => (
-              <button
-                key={days}
-                type="button"
-                className={recoveryDays === days ? 'active' : ''}
-                onClick={() => updateRecoveryDays(days)}
-              >
-                {days} day
-              </button>
-            ))}
-          </div>
           <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
             <Info size={16} strokeWidth={2.4} />
           </button>
@@ -1725,6 +1739,27 @@ function MuscleRecoveryCard({ workouts }) {
               </button>
             </div>
             <p>Red means trained today. Orange means the muscle is still recovering. Green means it is ready based on your selected recovery setting.</p>
+            <details className="recovery-advanced">
+              <summary>Advanced</summary>
+              <div className="recovery-advanced-panel">
+                <div>
+                  <strong>Recovery time</strong>
+                  <p>Choose how many full recovery days you want before a muscle turns green. Default is 1 day.</p>
+                </div>
+                <div className="recovery-days-toggle" aria-label="Recovery time">
+                  {[1, 2].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      className={recoveryDays === days ? 'active' : ''}
+                      onClick={() => updateRecoveryDays(days)}
+                    >
+                      {days} day
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       ) : null}
