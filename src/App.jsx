@@ -1084,14 +1084,69 @@ function getDayDifference(fromDateKey, toDateKey = todayValue()) {
   return Math.max(0, Math.round((to - from) / 86400000));
 }
 
-function calculateWorkoutConsistency(workouts, days = 84) {
-  const workoutDates = new Set(workouts.map((workout) => workout.date).filter(Boolean));
+function getCompletedSetCount(exercise = {}) {
+  return (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking)).length;
+}
+
+function getWorkoutDurationSeconds(workout = {}) {
+  const start = workout.startedAt ? new Date(workout.startedAt).getTime() : null;
+  const end = workout.completedAt ? new Date(workout.completedAt).getTime() : null;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return Math.round((end - start) / 1000);
+}
+
+function getWorkoutDaySummary(workouts = []) {
+  return workouts.reduce((summary, workout) => {
+    if (!workout.date) return summary;
+    const exercises = (workout.exercises || []).filter((exercise) => getCompletedSetCount(exercise) > 0);
+    const totalSets = exercises.reduce((total, exercise) => total + getCompletedSetCount(exercise), 0);
+    const duration = getWorkoutDurationSeconds(workout);
+    const current = summary.get(workout.date) || {
+      date: workout.date,
+      workoutNames: [],
+      durations: [],
+      exerciseCount: 0,
+      totalSets: 0,
+      workoutCount: 0,
+    };
+
+    summary.set(workout.date, {
+      ...current,
+      workoutNames: [...current.workoutNames, workout.label || workout.type || 'Workout'],
+      durations: Number.isFinite(duration) ? [...current.durations, duration] : current.durations,
+      exerciseCount: current.exerciseCount + exercises.length,
+      totalSets: current.totalSets + totalSets,
+      workoutCount: current.workoutCount + 1,
+    });
+    return summary;
+  }, new Map());
+}
+
+function getWeekStart(date) {
+  return addDays(date, -date.getDay());
+}
+
+function calculateWorkoutConsistency(workouts, minimumDays = 365) {
+  const daySummary = getWorkoutDaySummary(workouts);
+  const workoutDates = new Set([...daySummary.keys()]);
   const today = getLocalDateFromKey(todayValue());
-  const start = addDays(today, -days + 1);
-  const calendarDays = Array.from({ length: days }, (_, index) => {
+  const oldestWorkoutDate = [...workoutDates].sort()[0];
+  const minimumStart = addDays(today, -minimumDays + 1);
+  const naturalStart = oldestWorkoutDate ? getLocalDateFromKey(oldestWorkoutDate) : minimumStart;
+  const start = getWeekStart(naturalStart < minimumStart ? naturalStart : minimumStart);
+  const dayCount = getDayDifference(getDateKey(start), todayValue()) + 1;
+  const calendarDays = Array.from({ length: dayCount }, (_, index) => {
     const date = addDays(start, index);
     const dateKey = getDateKey(date);
-    return { date: dateKey, workedOut: workoutDates.has(dateKey) };
+    const summary = daySummary.get(dateKey) || null;
+    return {
+      date: dateKey,
+      dayOfWeek: date.getDay(),
+      weekIndex: Math.floor(index / 7) + 1,
+      isToday: dateKey === todayValue(),
+      workedOut: workoutDates.has(dateKey),
+      summary,
+    };
   });
 
   let currentStreak = 0;
@@ -1111,41 +1166,119 @@ function calculateWorkoutConsistency(workouts, days = 84) {
 
   const currentMonth = todayValue().slice(0, 7);
   const workoutsThisMonth = workouts.filter((workout) => String(workout.date || '').startsWith(currentMonth)).length;
+  const ninetyDayStart = addDays(today, -89);
+  const last90WorkoutDays = [...workoutDates].filter((dateKey) => getLocalDateFromKey(dateKey) >= ninetyDayStart && getLocalDateFromKey(dateKey) <= today).length;
+  const consistency90 = Math.round((last90WorkoutDays / 90) * 100);
+  const weekCount = Math.max(...calendarDays.map((day) => day.weekIndex), 1);
 
-  return { calendarDays, currentStreak, longestStreak, workoutsThisMonth };
+  return { calendarDays, currentStreak, longestStreak, workoutsThisMonth, consistency90, weekCount };
 }
 
-const RECOVERY_MUSCLES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Cardio'];
+const RECOVERY_MUSCLES = [
+  'Chest',
+  'Back',
+  'Front delts',
+  'Side delts',
+  'Rear delts',
+  'Biceps',
+  'Triceps',
+  'Forearms',
+  'Core',
+  'Glutes',
+  'Quads',
+  'Hamstrings',
+  'Calves',
+];
+
+const RECOVERY_DAYS_TO_READY = 3;
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function getExerciseRecoveryMuscles(exercise = {}) {
+  const name = normalizeName(exercise.name);
+  const muscle = exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '';
+  const groups = [];
+
+  if (/bench|incline|chest|fly|push up/.test(name) || muscle === 'Chest') groups.push('Chest');
+  if (/pull up|pulldown|row|deadlift/.test(name) || muscle === 'Back') groups.push('Back');
+  if (/shoulder press|overhead press/.test(name)) groups.push('Front delts', 'Triceps');
+  if (/lateral raise/.test(name)) groups.push('Side delts');
+  if (/rear delt|face pull/.test(name)) groups.push('Rear delts');
+  if (/curl|pull up|pulldown|row/.test(name) || muscle === 'Biceps') groups.push('Biceps');
+  if (/tricep|dip|bench|press|push up/.test(name) || muscle === 'Triceps') groups.push('Triceps');
+  if (/hammer curl|farmer|carry|grip|forearm/.test(name)) groups.push('Forearms');
+  if (/plank|crunch|knee raise|dead bug|pallof|core|ab/.test(name) || muscle === 'Core') groups.push('Core');
+  if (/hip thrust|kickback|deadlift|squat|leg press/.test(name) || muscle === 'Glutes') groups.push('Glutes');
+  if (/squat|leg press|leg extension|lunge|quad/.test(name) || muscle === 'Quads') groups.push('Quads');
+  if (/romanian|deadlift|leg curl|hamstring/.test(name) || muscle === 'Hamstrings') groups.push('Hamstrings');
+  if (/calf/.test(name) || muscle === 'Calves') groups.push('Calves');
+  if (muscle === 'Shoulders' && !groups.some((group) => group.includes('delts'))) groups.push('Front delts');
+
+  return uniqueValues(groups).filter((group) => RECOVERY_MUSCLES.includes(group));
+}
 
 function getRecoveryState(daysAgo) {
-  if (daysAgo === 0) return 'trained';
-  if (daysAgo === 1) return 'recovering';
-  if (daysAgo === 2) return 'mostly';
-  return 'rested';
+  if (daysAgo === null || daysAgo === undefined) return 'inactive';
+  if (daysAgo <= 0) return 'fatigued';
+  if (daysAgo < RECOVERY_DAYS_TO_READY) return 'recovering';
+  return 'ready';
+}
+
+function getRecoveryPercent(daysAgo) {
+  if (daysAgo === null || daysAgo === undefined) return null;
+  return Math.min(100, Math.max(18, Math.round((daysAgo / RECOVERY_DAYS_TO_READY) * 100)));
+}
+
+function getEstimatedReadyDate(lastTrainedDate) {
+  if (!lastTrainedDate) return '';
+  return getDateKey(addDays(getLocalDateFromKey(lastTrainedDate), RECOVERY_DAYS_TO_READY));
 }
 
 function calculateMuscleRecovery(workouts) {
-  const lastTrainedByMuscle = new Map();
+  const recoveryByMuscle = new Map(
+    RECOVERY_MUSCLES.map((muscle) => [
+      muscle,
+      {
+        muscle,
+        lastTrainedDate: '',
+        exercises: [],
+      },
+    ]),
+  );
+
   [...workouts]
     .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))
     .forEach((workout) => {
       (workout.exercises || []).forEach((exercise) => {
-        const meta = getExerciseMeta(exercise.name);
-        const muscle = exercise.muscle || meta?.muscle || '';
-        if (!muscle || lastTrainedByMuscle.has(muscle)) return;
         const hasCompletedSet = (exercise.sets || []).some((set) => isSetComplete(set, exercise.tracking));
-        if (hasCompletedSet) lastTrainedByMuscle.set(muscle, workout.date);
+        if (!hasCompletedSet) return;
+        getExerciseRecoveryMuscles(exercise).forEach((muscle) => {
+          const current = recoveryByMuscle.get(muscle);
+          if (!current || (current.lastTrainedDate && current.lastTrainedDate !== workout.date)) return;
+          recoveryByMuscle.set(muscle, {
+            ...current,
+            lastTrainedDate: workout.date,
+            exercises: uniqueValues([...(current.exercises || []), exercise.name || muscle]),
+          });
+        });
       });
     });
 
   return RECOVERY_MUSCLES.map((muscle) => {
-    const lastTrainedDate = lastTrainedByMuscle.get(muscle) || '';
+    const recovery = recoveryByMuscle.get(muscle);
+    const lastTrainedDate = recovery?.lastTrainedDate || '';
     const daysAgo = lastTrainedDate ? getDayDifference(lastTrainedDate) : null;
+    const recoveryPercent = getRecoveryPercent(daysAgo);
     return {
       muscle,
       lastTrainedDate,
       daysAgo,
-      state: lastTrainedDate ? getRecoveryState(daysAgo) : 'rested',
+      state: getRecoveryState(daysAgo),
+      recoveryPercent,
+      readyDate: getEstimatedReadyDate(lastTrainedDate),
+      exercises: recovery?.exercises || [],
     };
   });
 }
@@ -1238,11 +1371,33 @@ function CategoryMediaBadge({ type, size = 'md' }) {
   );
 }
 
+function formatWorkoutDayTitle(day) {
+  const parts = [formatShortDate(day.date)];
+  if (!day.summary) return `${parts[0]}: no workout`;
+  parts.push(day.summary.workoutNames.join(', '));
+  if (day.summary.durations.length) parts.push(`Duration: ${formatDuration(day.summary.durations.reduce((total, duration) => total + duration, 0))}`);
+  parts.push(`${day.summary.exerciseCount} exercise${day.summary.exerciseCount === 1 ? '' : 's'}`);
+  parts.push(`${day.summary.totalSets} set${day.summary.totalSets === 1 ? '' : 's'}`);
+  return parts.join(' | ');
+}
+
 function WorkoutConsistencyCalendar({ workouts }) {
-  const { calendarDays, currentStreak, workoutsThisMonth, longestStreak } = useMemo(
+  const scrollRef = useRef(null);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const { calendarDays, currentStreak, workoutsThisMonth, longestStreak, consistency90, weekCount } = useMemo(
     () => calculateWorkoutConsistency(workouts),
     [workouts],
   );
+  const selectedSummary = selectedDay?.summary || null;
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      node.scrollLeft = node.scrollWidth;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [weekCount]);
 
   return (
     <section className="dashboard-card consistency-card">
@@ -1253,28 +1408,154 @@ function WorkoutConsistencyCalendar({ workouts }) {
         </div>
         <CalendarRange size={18} strokeWidth={2.2} />
       </div>
-      <div className="consistency-grid" aria-label="Workout consistency calendar">
-        {calendarDays.map((day) => (
-          <span
-            key={day.date}
-            className={`consistency-day ${day.workedOut ? 'worked-out' : ''}`}
-            title={`${formatShortDate(day.date)}${day.workedOut ? ': workout logged' : ': no workout'}`}
-          />
-        ))}
+      <div className="consistency-scroll" ref={scrollRef} aria-label="Workout consistency heatmap" tabIndex={0}>
+        <div className="consistency-grid" style={{ '--week-count': weekCount }}>
+          {calendarDays.map((day) => (
+            <button
+              key={day.date}
+              type="button"
+              className={`consistency-day ${day.workedOut ? 'worked-out' : ''} ${day.isToday ? 'today' : ''} ${selectedDay?.date === day.date ? 'selected' : ''}`}
+              style={{ gridColumn: day.weekIndex, gridRow: day.dayOfWeek + 1 }}
+              title={formatWorkoutDayTitle(day)}
+              aria-label={formatWorkoutDayTitle(day)}
+              onClick={() => setSelectedDay(day)}
+            />
+          ))}
+        </div>
       </div>
+      {selectedDay ? (
+        <div className="consistency-detail">
+          <strong>{formatShortDate(selectedDay.date)}</strong>
+          <span>{selectedSummary ? selectedSummary.workoutNames.join(', ') : 'No workout logged'}</span>
+          {selectedSummary?.durations.length ? <span>{formatDuration(selectedSummary.durations.reduce((total, duration) => total + duration, 0))}</span> : null}
+          {selectedSummary ? <span>{selectedSummary.exerciseCount} exercise{selectedSummary.exerciseCount === 1 ? '' : 's'} / {selectedSummary.totalSets} set{selectedSummary.totalSets === 1 ? '' : 's'}</span> : null}
+        </div>
+      ) : null}
       <div className="dashboard-stat-row">
-        <span><strong>{workoutsThisMonth}</strong> this month</span>
+        <span><strong>{currentStreak}</strong> current streak</span>
         <span><strong>{longestStreak}</strong> longest streak</span>
+        <span><strong>{workoutsThisMonth}</strong> this month</span>
+        <span><strong>{consistency90}%</strong> last 90 days</span>
       </div>
     </section>
   );
 }
 
+function RecoveryLegend() {
+  return (
+    <div className="recovery-legend" aria-hidden="true">
+      <span><i className="fatigued" /> Fatigued</span>
+      <span><i className="recovering" /> Recovering</span>
+      <span><i className="ready" /> Ready</span>
+      <span><i className="inactive" /> No data</span>
+    </div>
+  );
+}
+
+function AnatomyRegion({ item, selected, paths, onSelect }) {
+  const label = item.lastTrainedDate
+    ? `${item.muscle}: ${item.recoveryPercent}% recovered, last trained ${formatShortDate(item.lastTrainedDate)}`
+    : `${item.muscle}: no recent data`;
+
+  return (
+    <g
+      className={`anatomy-hit-area ${selected ? 'selected' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onClick={() => onSelect(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(item);
+        }
+      }}
+    >
+      <title>{label}</title>
+      {paths.map((path, index) => (
+        <path key={`${item.muscle}-${index}`} className={`anatomy-region ${item.state}`} d={path} />
+      ))}
+    </g>
+  );
+}
+
+function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
+  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
+  const regions = [
+    { muscle: 'Chest', paths: ['M56 53 C46 54 39 61 38 75 C47 81 59 80 67 72 C66 61 63 55 56 53 Z', 'M83 53 C76 55 73 61 72 72 C80 80 92 81 101 75 C100 61 93 54 83 53 Z'] },
+    { muscle: 'Front delts', paths: ['M35 52 C25 57 22 68 25 80 C34 79 39 72 41 60 Z', 'M105 52 C115 57 118 68 115 80 C106 79 101 72 99 60 Z'] },
+    { muscle: 'Side delts', paths: ['M24 78 C17 88 14 104 17 118 C25 117 30 105 31 90 Z', 'M116 78 C123 88 126 104 123 118 C115 117 110 105 109 90 Z', 'M174 75 C166 84 163 99 166 114 C174 113 179 101 180 87 Z', 'M266 75 C274 84 277 99 274 114 C266 113 261 101 260 87 Z'] },
+    { muscle: 'Biceps', paths: ['M27 82 C20 95 19 112 24 125 C32 122 36 104 34 89 Z', 'M113 82 C120 95 121 112 116 125 C108 122 104 104 106 89 Z'] },
+    { muscle: 'Triceps', paths: ['M168 82 C163 97 164 112 171 126 C178 120 181 103 178 88 Z', 'M272 82 C277 97 276 112 269 126 C262 120 259 103 262 88 Z'] },
+    { muscle: 'Forearms', paths: ['M23 124 C18 139 17 156 23 169 C31 158 34 142 31 126 Z', 'M117 124 C122 139 123 156 117 169 C109 158 106 142 109 126 Z', 'M170 126 C164 141 164 157 171 170 C178 158 180 142 177 127 Z', 'M270 126 C276 141 276 157 269 170 C262 158 260 142 263 127 Z'] },
+    { muscle: 'Core', paths: ['M55 79 C50 91 50 115 57 132 L83 132 C90 115 90 91 85 79 C78 83 62 83 55 79 Z'] },
+    { muscle: 'Quads', paths: ['M52 135 C44 153 43 184 51 207 C62 190 66 159 64 135 Z', 'M86 135 C84 159 88 190 99 207 C107 184 106 153 98 135 Z'] },
+    { muscle: 'Calves', paths: ['M48 209 C42 227 43 250 51 266 C60 250 61 227 56 209 Z', 'M94 209 C89 227 90 250 99 266 C107 250 108 227 102 209 Z', 'M200 208 C193 227 194 250 202 266 C211 249 213 227 208 208 Z', 'M232 208 C227 227 229 249 238 266 C246 250 247 227 240 208 Z'] },
+    { muscle: 'Back', paths: ['M203 51 C190 59 184 80 187 106 C198 116 212 119 220 119 C228 119 242 116 253 106 C256 80 250 59 237 51 C229 57 211 57 203 51 Z'] },
+    { muscle: 'Rear delts', paths: ['M184 53 C174 58 170 69 173 81 C183 80 189 72 191 60 Z', 'M256 53 C266 58 270 69 267 81 C257 80 251 72 249 60 Z'] },
+    { muscle: 'Glutes', paths: ['M191 130 C189 146 198 160 216 162 C219 150 218 139 211 130 Z', 'M229 130 C222 139 221 150 224 162 C242 160 251 146 249 130 Z'] },
+    { muscle: 'Hamstrings', paths: ['M197 164 C190 183 192 204 202 219 C213 200 216 181 213 164 Z', 'M227 164 C224 181 227 200 238 219 C248 204 250 183 243 164 Z'] },
+  ];
+
+  return (
+    <div className="anatomy-stage">
+      <svg className="anatomy-svg" viewBox="0 0 290 286" role="img" aria-label="Front and back muscle recovery anatomy">
+        <text x="70" y="16" textAnchor="middle" className="anatomy-view-label">Front</text>
+        <text x="220" y="16" textAnchor="middle" className="anatomy-view-label">Back</text>
+        <g className="anatomy-base" aria-hidden="true">
+          <path d="M70 22 C57 22 48 32 48 45 C48 51 52 56 56 59 L50 79 L42 139 L47 208 L43 269 L59 269 L68 211 L70 152 L72 211 L81 269 L97 269 L93 208 L100 139 L90 79 L84 59 C88 56 92 51 92 45 C92 32 83 22 70 22 Z" />
+          <path d="M220 22 C207 22 198 32 198 45 C198 51 202 56 206 59 L190 78 L184 139 L193 208 L196 269 L212 269 L220 211 L228 269 L244 269 L247 208 L256 139 L250 78 L234 59 C238 56 242 51 242 45 C242 32 233 22 220 22 Z" />
+        </g>
+        {regions.map((region) => {
+          const item = recoveryByMuscle.get(region.muscle);
+          return item ? (
+            <AnatomyRegion
+              key={region.muscle}
+              item={item}
+              selected={selectedMuscle === item.muscle}
+              paths={region.paths}
+              onSelect={onSelect}
+            />
+          ) : null;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function RecoveryDetailPanel({ item }) {
+  if (!item) return null;
+  return (
+    <div className={`recovery-detail-panel ${item.state}`}>
+      <div>
+        <span className="tiny-label">{item.state === 'inactive' ? 'No recent data' : `${item.recoveryPercent}% recovered`}</span>
+        <h3>{item.muscle}</h3>
+      </div>
+      <div className="recovery-detail-grid">
+        <span>
+          <small>Last trained</small>
+          <strong>{item.lastTrainedDate ? formatShortDate(item.lastTrainedDate) : 'Not yet'}</strong>
+        </span>
+        <span>
+          <small>Ready date</small>
+          <strong>{item.readyDate ? formatShortDate(item.readyDate) : 'Unknown'}</strong>
+        </span>
+      </div>
+      <div className="recovery-exercise-list">
+        <small>Exercises</small>
+        <p>{item.exercises.length ? item.exercises.join(', ') : 'No logged exercises yet.'}</p>
+      </div>
+    </div>
+  );
+}
+
 function MuscleRecoveryCard({ workouts }) {
   const [showInfo, setShowInfo] = useState(false);
+  const [selectedMuscle, setSelectedMuscle] = useState(null);
   const recovery = useMemo(() => calculateMuscleRecovery(workouts), [workouts]);
+  const selectedRecovery = recovery.find((item) => item.muscle === selectedMuscle) || recovery.find((item) => item.state !== 'inactive') || recovery[0];
   const suggestedMuscles = recovery
-    .filter((item) => item.state === 'rested' && item.muscle !== 'Cardio')
+    .filter((item) => item.state === 'ready')
     .slice(0, 3)
     .map((item) => item.muscle);
 
@@ -1289,13 +1570,13 @@ function MuscleRecoveryCard({ workouts }) {
           <Info size={16} strokeWidth={2.4} />
         </button>
       </div>
-      <div className="recovery-map" aria-label="Muscle recovery map">
-        {recovery.map((item) => (
-          <span key={item.muscle} className={`recovery-muscle ${item.state}`} title={item.lastTrainedDate ? `${item.muscle}: ${item.daysAgo} day(s) ago` : `${item.muscle}: no saved workout`}>
-            {item.muscle}
-          </span>
-        ))}
-      </div>
+      <MuscleAnatomyGraphic
+        recovery={recovery}
+        selectedMuscle={selectedRecovery?.muscle}
+        onSelect={(item) => setSelectedMuscle(item.muscle)}
+      />
+      <RecoveryLegend />
+      <RecoveryDetailPanel item={selectedRecovery} />
       {showInfo ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setShowInfo(false)}>
           <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-info-title" onClick={(event) => event.stopPropagation()}>
@@ -1305,7 +1586,7 @@ function MuscleRecoveryCard({ workouts }) {
                 <X size={18} strokeWidth={2.4} />
               </button>
             </div>
-            <p>Darker red means trained today, amber means one day ago, blue means two days ago, and muted gray means three or more days ago or not trained yet.</p>
+            <p>Red means just trained, orange means still recovering, green means ready, and gray means there is no recent logged data for that region.</p>
           </div>
         </div>
       ) : null}
