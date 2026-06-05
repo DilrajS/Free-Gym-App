@@ -254,13 +254,13 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   padding: 0;
   text-decoration: none;
 }
-.custom-sheet, .backup-card, .chart-card, .history-card, .template-card, .empty-panel, .exercise-card, .add-exercise-card, .notes-card, .chart-controls {
+.custom-sheet, .backup-card, .chart-card, .history-card, .template-card, .empty-panel, .exercise-card, .add-exercise-card, .notes-card, .chart-controls, .dashboard-card {
   background: linear-gradient(180deg, rgba(21,24,29,0.95), rgba(17,20,25,0.98));
   border: 1px solid var(--border);
   border-radius: 22px;
   box-shadow: var(--shadow);
 }
-.custom-sheet, .backup-card, .empty-panel, .chart-card, .template-card, .add-exercise-card, .notes-card, .chart-controls { padding: 18px; }
+.custom-sheet, .backup-card, .empty-panel, .chart-card, .template-card, .add-exercise-card, .notes-card, .chart-controls, .dashboard-card { padding: 18px; }
 .custom-sheet { display: grid; gap: 12px; }
 .sheet-header {
   display: flex;
@@ -405,6 +405,100 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   background: linear-gradient(135deg, rgba(46, 160, 67, 0.95), rgba(92, 214, 141, 0.82));
   box-shadow: 0 10px 24px rgba(46, 160, 67, 0.25);
 }
+.dashboard-preview {
+  display: grid;
+  gap: 12px;
+}
+.dashboard-card {
+  display: grid;
+  gap: 12px;
+  border-radius: 18px;
+}
+.dashboard-card-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dashboard-card-head p {
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.35;
+  font-size: 0.9rem;
+}
+.dashboard-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dashboard-stat-row span {
+  color: var(--muted);
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.dashboard-stat-row strong { color: var(--text); }
+.consistency-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 10px);
+  grid-auto-flow: column;
+  grid-auto-columns: 10px;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.consistency-day {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #2a3038;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.consistency-day.worked-out {
+  background: #2ea043;
+  border-color: rgba(92, 214, 141, 0.42);
+}
+.recovery-map {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.recovery-muscle {
+  min-height: 34px;
+  border-radius: 12px;
+  padding: 8px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.15;
+  border: 1px solid rgba(255,255,255,0.07);
+  color: #d8dee5;
+}
+.recovery-muscle.trained {
+  color: #ffd5d6;
+  background: rgba(229, 72, 77, 0.24);
+  border-color: rgba(229, 72, 77, 0.38);
+}
+.recovery-muscle.recovering {
+  color: #ffe4a3;
+  background: rgba(255, 209, 102, 0.16);
+  border-color: rgba(255, 209, 102, 0.3);
+}
+.recovery-muscle.mostly {
+  color: #cde5ff;
+  background: rgba(118, 168, 255, 0.14);
+  border-color: rgba(118, 168, 255, 0.28);
+}
+.recovery-muscle.rested {
+  color: var(--muted);
+  background: rgba(255,255,255,0.025);
+}
 .exercise-stack { display: grid; gap: 12px; }
 .exercise-card { padding: 14px; display: grid; gap: 12px; border-radius: 18px; }
 .exercise-card-top {
@@ -414,12 +508,15 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   align-items: start;
 }
 .exercise-thumbnail-button {
-  width: 52px;
-  height: 52px;
+  width: 60px;
+  height: 60px;
   border: none;
-  background: transparent;
-  padding: 0;
-  flex: 0 0 52px;
+  background: rgba(255,255,255,0.018);
+  border-radius: 16px;
+  padding: 4px;
+  flex: 0 0 60px;
+  display: inline-grid;
+  place-items: center;
 }
 .exercise-thumbnail {
   width: 52px;
@@ -488,9 +585,8 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .exercise-actions { display: flex; gap: 4px; }
 .icon-button, .mini-icon-button {
@@ -607,6 +703,67 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 .info-modal p {
   color: var(--muted);
   line-height: 1.5;
+}
+.watch-reminder-modal { gap: 14px; }
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 700;
+}
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.modal-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.photo-preview-backdrop {
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+.photo-preview-modal {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 24px);
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.photo-preview-modal img {
+  width: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--surface);
+  object-fit: contain;
+  touch-action: pinch-zoom;
+}
+.photo-preview-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  background: rgba(17,20,25,0.82);
+  backdrop-filter: blur(8px);
+}
+.photo-preview-empty {
+  min-height: 260px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
 }
 .add-row {
   position: relative;
@@ -914,6 +1071,17 @@ h2 { font-size: 2rem; letter-spacing: -0.04em; }
 }
 .warning-card strong {
   color: #ffd5d6;
+}
+.preference-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+}
+.preference-card p {
+  margin-top: 4px;
 }
 .reset-link {
   justify-self: start;

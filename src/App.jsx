@@ -30,6 +30,7 @@ import {
   SquarePen,
   Star,
   Timer,
+  Trophy,
   Trash2,
   TrendingUp,
   Users,
@@ -42,6 +43,7 @@ const ACTIVE_WORKOUT_KEY = `${STORAGE_KEY}-active-workout`;
 const WORKOUT_TEMPLATES_KEY = `${STORAGE_KEY}-templates`;
 const FAVORITE_EXERCISES_KEY = `${STORAGE_KEY}-favorite-exercises`;
 const WGER_MEDIA_CACHE_KEY = `${STORAGE_KEY}-wger-media`;
+const APPLE_WATCH_REMINDER_KEY = `${STORAGE_KEY}-apple-watch-reminder`;
 const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Backup'];
 const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
 const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
@@ -438,7 +440,7 @@ function formatPreviousSetSummary(set, tracking = 'weight/reps') {
   const normalizedTracking = normalizeTracking(tracking);
   if (!isSetComplete(set, normalizedTracking)) return '';
   if (normalizedTracking === 'weight/reps') {
-    return `${formatDistance(set.weight)}×${formatNumber(parseNumericValue(set.reps))}`;
+    return `${formatDistance(set.weight)} x ${formatNumber(parseNumericValue(set.reps))}`;
   }
   if (normalizedTracking === 'bodyweight') {
     const addedWeight = parseNumericValue(set.weight);
@@ -488,7 +490,7 @@ function createExercise(name = '', previousSets = []) {
     equipment: meta?.equipment || '',
     tracking,
     sets: populatedSets.length
-      ? populatedSets.map((set) => createPrefilledSetForTracking(tracking, set))
+      ? populatedSets.map((set) => createSetForTracking(tracking, set))
       : [createSetForTracking(tracking)],
   });
 }
@@ -544,6 +546,11 @@ function getTemplateForType(type, workouts) {
       .map((exercise) => ({
         name: String(exercise.name || '').trim(),
         sets: Array.isArray(exercise.sets) ? exercise.sets : [],
+        media: normalizeExerciseMedia(exercise, getExerciseMeta(exercise.name)),
+        muscle: exercise.muscle || '',
+        type: exercise.type || '',
+        equipment: exercise.equipment || '',
+        tracking: exercise.tracking || getExerciseMeta(exercise.name)?.tracking || 'weight/reps',
       }))
       .filter((exercise) => exercise.name);
 
@@ -564,7 +571,18 @@ function createWorkout(type, customTitle = '', workouts = []) {
     type: normalizedType,
     label,
     notes: '',
-    exercises: template.map((exercise) => createExercise(exercise.name, exercise.sets)),
+    exercises: template.map((exercise) => {
+      const nextExercise = createExercise(exercise.name, exercise.sets);
+      return {
+        ...nextExercise,
+        muscle: exercise.muscle || nextExercise.muscle,
+        type: normalizeWorkoutType(exercise.type || nextExercise.type),
+        equipment: exercise.equipment || nextExercise.equipment,
+        tracking: normalizeTracking(exercise.tracking || nextExercise.tracking),
+        // Machine photos are copied into each workout. Updating one active exercise will not mutate past saved workouts.
+        media: normalizeExerciseMedia({ ...nextExercise, media: exercise.media }, getExerciseMeta(exercise.name)),
+      };
+    }),
   });
 }
 
@@ -636,6 +654,14 @@ function readFavoriteExercises() {
 
 function saveFavoriteExercises(names) {
   localStorage.setItem(FAVORITE_EXERCISES_KEY, JSON.stringify(Array.isArray(names) ? names : []));
+}
+
+function readAppleWatchReminderEnabled() {
+  return localStorage.getItem(APPLE_WATCH_REMINDER_KEY) !== 'off';
+}
+
+function saveAppleWatchReminderEnabled(enabled) {
+  localStorage.setItem(APPLE_WATCH_REMINDER_KEY, enabled ? 'on' : 'off');
 }
 
 function readCachedWgerMedia() {
@@ -887,23 +913,71 @@ function calculateExerciseRecords(workouts) {
   return records;
 }
 
-function getCurrentSetPrs(set, exerciseRecords, tracking = 'weight/reps') {
-  if (normalizeTracking(tracking) !== 'weight/reps') return [];
-  const weight = Number(set.weight);
-  const reps = Number(set.reps);
-  const hasWeight = Number.isFinite(weight) && weight > 0;
-  const hasReps = Number.isFinite(reps) && reps > 0;
-  if (!exerciseRecords || (!hasWeight && !hasReps)) return [];
+function getExerciseSetPrMap(exercise, exerciseRecords) {
+  const prMap = new Map();
+  if (normalizeTracking(exercise.tracking) !== 'weight/reps' || !exerciseRecords) return prMap;
 
-  const prs = [];
-  const volume = hasWeight && hasReps ? weight * reps : 0;
-  // Epley estimate: weight * (1 + reps / 30). Good enough for lightweight PR hints.
-  const estimated1rm = hasWeight && hasReps ? estimateOneRepMax(weight, reps) : 0;
-  if (hasWeight && weight > exerciseRecords.maxWeight) prs.push('Max weight PR');
-  if (estimated1rm && estimated1rm > exerciseRecords.estimated1rm) prs.push(`1RM: ${estimated1rm} lb`);
-  if (volume && volume > exerciseRecords.bestVolume) prs.push('Volume PR');
-  if (hasReps && reps > exerciseRecords.bestReps) prs.push('Rep PR');
-  return prs;
+  const candidates = (exercise.sets || [])
+    .map((set, index) => {
+      const weight = parseNumericValue(set.weight);
+      const reps = parseNumericValue(set.reps);
+      const hasWeight = Number.isFinite(weight) && weight > 0;
+      const hasReps = Number.isFinite(reps) && reps > 0;
+      const estimated1rm = hasWeight && hasReps ? estimateOneRepMax(weight, reps) : 0;
+      return {
+        set,
+        index,
+        weight: hasWeight ? weight : 0,
+        reps: hasReps ? reps : 0,
+        volume: hasWeight && hasReps ? weight * reps : 0,
+        estimated1rm,
+      };
+    })
+    .filter((item) => item.weight || item.reps || item.volume || item.estimated1rm);
+
+  const pickBest = (items, key, previousBest) =>
+    items
+      .filter((item) => item[key] > previousBest)
+      .sort((a, b) => b[key] - a[key] || b.index - a.index)[0];
+
+  const addAchievement = (item, achievement) => {
+    if (!item?.set?.id) return;
+    const current = prMap.get(item.set.id) || [];
+    prMap.set(item.set.id, [...current, achievement]);
+  };
+
+  const bestOneRepMax = pickBest(candidates, 'estimated1rm', exerciseRecords.estimated1rm || 0);
+  addAchievement(bestOneRepMax, {
+    id: 'estimated1rm',
+    label: `1RM PR - ${bestOneRepMax?.estimated1rm || 0} lb`,
+    info: true,
+  });
+
+  const bestMaxWeight = pickBest(candidates, 'weight', exerciseRecords.maxWeight || 0);
+  if (bestMaxWeight && bestMaxWeight.set.id !== bestOneRepMax?.set.id) {
+    addAchievement(bestMaxWeight, {
+      id: 'maxWeight',
+      label: `Max weight PR - ${formatNumber(bestMaxWeight.weight, bestMaxWeight.weight % 1 === 0 ? 0 : 2)} lb`,
+    });
+  }
+
+  const bestVolume = pickBest(candidates, 'volume', exerciseRecords.bestVolume || 0);
+  if (bestVolume && !prMap.has(bestVolume.set.id)) {
+    addAchievement(bestVolume, {
+      id: 'volume',
+      label: 'Volume PR',
+    });
+  }
+
+  const bestReps = pickBest(candidates, 'reps', exerciseRecords.bestReps || 0);
+  if (bestReps && !prMap.has(bestReps.set.id)) {
+    addAchievement(bestReps, {
+      id: 'reps',
+      label: 'Rep PR',
+    });
+  }
+
+  return prMap;
 }
 
 function getLastPerformanceMap(workouts) {
@@ -990,6 +1064,92 @@ function getChartSeries(workouts, { category, exerciseName, rangeId, metric }) {
   return points;
 }
 
+function getLocalDateFromKey(dateKey) {
+  return new Date(`${dateKey}T12:00:00`);
+}
+
+function getDateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getDayDifference(fromDateKey, toDateKey = todayValue()) {
+  const from = getLocalDateFromKey(fromDateKey);
+  const to = getLocalDateFromKey(toDateKey);
+  return Math.max(0, Math.round((to - from) / 86400000));
+}
+
+function calculateWorkoutConsistency(workouts, days = 84) {
+  const workoutDates = new Set(workouts.map((workout) => workout.date).filter(Boolean));
+  const today = getLocalDateFromKey(todayValue());
+  const start = addDays(today, -days + 1);
+  const calendarDays = Array.from({ length: days }, (_, index) => {
+    const date = addDays(start, index);
+    const dateKey = getDateKey(date);
+    return { date: dateKey, workedOut: workoutDates.has(dateKey) };
+  });
+
+  let currentStreak = 0;
+  for (let cursor = new Date(today); workoutDates.has(getDateKey(cursor)); cursor = addDays(cursor, -1)) {
+    currentStreak += 1;
+  }
+
+  let longestStreak = 0;
+  let runningStreak = 0;
+  [...workoutDates]
+    .sort()
+    .forEach((dateKey, index, dates) => {
+      const previous = dates[index - 1];
+      runningStreak = previous && getDayDifference(previous, dateKey) === 1 ? runningStreak + 1 : 1;
+      longestStreak = Math.max(longestStreak, runningStreak);
+    });
+
+  const currentMonth = todayValue().slice(0, 7);
+  const workoutsThisMonth = workouts.filter((workout) => String(workout.date || '').startsWith(currentMonth)).length;
+
+  return { calendarDays, currentStreak, longestStreak, workoutsThisMonth };
+}
+
+const RECOVERY_MUSCLES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Cardio'];
+
+function getRecoveryState(daysAgo) {
+  if (daysAgo === 0) return 'trained';
+  if (daysAgo === 1) return 'recovering';
+  if (daysAgo === 2) return 'mostly';
+  return 'rested';
+}
+
+function calculateMuscleRecovery(workouts) {
+  const lastTrainedByMuscle = new Map();
+  [...workouts]
+    .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))
+    .forEach((workout) => {
+      (workout.exercises || []).forEach((exercise) => {
+        const meta = getExerciseMeta(exercise.name);
+        const muscle = exercise.muscle || meta?.muscle || '';
+        if (!muscle || lastTrainedByMuscle.has(muscle)) return;
+        const hasCompletedSet = (exercise.sets || []).some((set) => isSetComplete(set, exercise.tracking));
+        if (hasCompletedSet) lastTrainedByMuscle.set(muscle, workout.date);
+      });
+    });
+
+  return RECOVERY_MUSCLES.map((muscle) => {
+    const lastTrainedDate = lastTrainedByMuscle.get(muscle) || '';
+    const daysAgo = lastTrainedDate ? getDayDifference(lastTrainedDate) : null;
+    return {
+      muscle,
+      lastTrainedDate,
+      daysAgo,
+      state: lastTrainedDate ? getRecoveryState(daysAgo) : 'rested',
+    };
+  });
+}
+
 function getExerciseFieldConfig(exercise, showAddedWeight = false) {
   const tracking = normalizeTracking(exercise.tracking);
   const baseConfig = getTrackingConfig(tracking);
@@ -1003,6 +1163,13 @@ function getExerciseFieldConfig(exercise, showAddedWeight = false) {
 
 function getSetGridStyle(fieldCount) {
   return { gridTemplateColumns: `40px repeat(${fieldCount}, minmax(0, 1fr)) 34px` };
+}
+
+function getSetFieldPlaceholder(set, field) {
+  const previousValue = set?.[field.previousKey];
+  return previousValue !== undefined && previousValue !== null && String(previousValue).trim() !== ''
+    ? `Last: ${previousValue}`
+    : field.placeholder;
 }
 
 function ConfettiLayer({ bursts }) {
@@ -1071,7 +1238,151 @@ function CategoryMediaBadge({ type, size = 'md' }) {
   );
 }
 
-function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDraft }) {
+function WorkoutConsistencyCalendar({ workouts }) {
+  const { calendarDays, currentStreak, workoutsThisMonth, longestStreak } = useMemo(
+    () => calculateWorkoutConsistency(workouts),
+    [workouts],
+  );
+
+  return (
+    <section className="dashboard-card consistency-card">
+      <div className="dashboard-card-head">
+        <div>
+          <strong>Consistency</strong>
+          <p>{currentStreak ? `${currentStreak} day current streak` : 'No active streak yet'}</p>
+        </div>
+        <CalendarRange size={18} strokeWidth={2.2} />
+      </div>
+      <div className="consistency-grid" aria-label="Workout consistency calendar">
+        {calendarDays.map((day) => (
+          <span
+            key={day.date}
+            className={`consistency-day ${day.workedOut ? 'worked-out' : ''}`}
+            title={`${formatShortDate(day.date)}${day.workedOut ? ': workout logged' : ': no workout'}`}
+          />
+        ))}
+      </div>
+      <div className="dashboard-stat-row">
+        <span><strong>{workoutsThisMonth}</strong> this month</span>
+        <span><strong>{longestStreak}</strong> longest streak</span>
+      </div>
+    </section>
+  );
+}
+
+function MuscleRecoveryCard({ workouts }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const recovery = useMemo(() => calculateMuscleRecovery(workouts), [workouts]);
+  const suggestedMuscles = recovery
+    .filter((item) => item.state === 'rested' && item.muscle !== 'Cardio')
+    .slice(0, 3)
+    .map((item) => item.muscle);
+
+  return (
+    <section className="dashboard-card recovery-card">
+      <div className="dashboard-card-head">
+        <div>
+          <strong>Muscle recovery</strong>
+          <p>{suggestedMuscles.length ? `Ready: ${suggestedMuscles.join(', ')}` : 'Log workouts to build recovery history'}</p>
+        </div>
+        <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
+          <Info size={16} strokeWidth={2.4} />
+        </button>
+      </div>
+      <div className="recovery-map" aria-label="Muscle recovery map">
+        {recovery.map((item) => (
+          <span key={item.muscle} className={`recovery-muscle ${item.state}`} title={item.lastTrainedDate ? `${item.muscle}: ${item.daysAgo} day(s) ago` : `${item.muscle}: no saved workout`}>
+            {item.muscle}
+          </span>
+        ))}
+      </div>
+      {showInfo ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowInfo(false)}>
+          <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-info-title" onClick={(event) => event.stopPropagation()}>
+            <div className="sheet-header">
+              <h3 id="recovery-info-title">Recovery colors</h3>
+              <button type="button" className="sheet-close" aria-label="Close recovery info" onClick={() => setShowInfo(false)}>
+                <X size={18} strokeWidth={2.4} />
+              </button>
+            </div>
+            <p>Darker red means trained today, amber means one day ago, blue means two days ago, and muted gray means three or more days ago or not trained yet.</p>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function DashboardPreview({ workouts }) {
+  return (
+    <div className="dashboard-preview">
+      <WorkoutConsistencyCalendar workouts={workouts} />
+      <MuscleRecoveryCard workouts={workouts} />
+    </div>
+  );
+}
+
+function AppleWatchReminderModal({ defaultRemind, onContinue, onClose }) {
+  const [remind, setRemind] = useState(defaultRemind);
+
+  const continueWithPreference = () => {
+    onContinue(remind);
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="info-modal watch-reminder-modal" role="dialog" aria-modal="true" aria-labelledby="watch-reminder-title" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-header">
+          <h3 id="watch-reminder-title">Start Apple Watch workout?</h3>
+          <button type="button" className="sheet-close" aria-label="Close Apple Watch reminder" onClick={onClose}>
+            <X size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+        <p>Tracking on your watch improves heart rate, calorie, and workout data.</p>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={remind} onChange={(event) => setRemind(event.target.checked)} />
+          <span>Remind me before workouts</span>
+        </label>
+        <div className="modal-action-row">
+          <button type="button" className="secondary-button" onClick={continueWithPreference}>
+            Skip
+          </button>
+          <button type="button" className="primary-button" onClick={continueWithPreference}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PhotoPreviewModal({ exercise, mediaLibrary = {}, onClose }) {
+  const [failedUrl, setFailedUrl] = useState('');
+  if (!exercise) return null;
+  const media = getExerciseMedia(exercise, mediaLibrary);
+  const url = media.machinePhotoUrl || media.machinePhotoThumbnailUrl || getExerciseDemoUrl(exercise, mediaLibrary);
+  const visibleUrl = url && url !== failedUrl ? url : '';
+
+  return (
+    <div className="modal-backdrop photo-preview-backdrop" role="presentation" onClick={onClose}>
+      <div className="photo-preview-modal" role="dialog" aria-modal="true" aria-label={`${exercise.name || 'Exercise'} photo preview`} onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="sheet-close photo-preview-close" aria-label="Close photo preview" onClick={onClose}>
+          <X size={18} strokeWidth={2.4} />
+        </button>
+        {visibleUrl ? (
+          <img src={visibleUrl} alt="" onError={() => setFailedUrl(visibleUrl)} />
+        ) : (
+          <div className="photo-preview-empty">
+            <Dumbbell size={42} strokeWidth={2.1} />
+            <p>No photo saved for this exercise yet.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDraft, workouts }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const customSheetRef = useRef(null);
@@ -1103,6 +1414,8 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
           <h1>What are you training today?</h1>
         </div>
       </div>
+
+      <DashboardPreview workouts={workouts} />
 
       <div className="stack-lg">
         {draftWorkout ? (
@@ -1396,6 +1709,7 @@ function ActiveWorkoutScreen({
   const [exerciseFilter, setExerciseFilter] = useState(normalizeWorkoutType(workout.type) === 'Custom' ? 'All' : normalizeWorkoutType(workout.type));
   const [showOneRepMaxInfo, setShowOneRepMaxInfo] = useState(false);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
+  const [photoPreviewExerciseId, setPhotoPreviewExerciseId] = useState(null);
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises),
     [workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises],
@@ -1430,7 +1744,7 @@ function ActiveWorkoutScreen({
           tracking: nextTracking,
           media: normalizeExerciseMedia({ ...exercise, name }, meta),
           sets: previousSets.length
-            ? previousSets.map((set) => createPrefilledSetForTracking(nextTracking, set))
+            ? previousSets.map((set) => createSetForTracking(nextTracking, set))
             : exercise.sets.map((set) => normalizeSet(set, nextTracking)),
         };
       }),
@@ -1533,6 +1847,7 @@ function ActiveWorkoutScreen({
   };
 
   const detailExercise = workout.exercises.find((exercise) => exercise.id === detailExerciseId);
+  const photoPreviewExercise = workout.exercises.find((exercise) => exercise.id === photoPreviewExerciseId);
 
   return (
     <div className="screen">
@@ -1554,13 +1869,12 @@ function ActiveWorkoutScreen({
       <div className="exercise-stack">
         {workout.exercises.map((exercise, index) => {
           const lastTime = lastPerformanceMap.get(normalizeName(exercise.name));
-          const meta = getExerciseMeta(exercise.name) || exercise;
           const records = exerciseRecords.get(normalizeName(exercise.name));
+          const prBySetId = getExerciseSetPrMap(exercise, records);
           const showAddedWeight = normalizeTracking(exercise.tracking) === 'bodyweight'
             && (bodyweightWeightVisible[exercise.id]
               || exercise.sets.some((set) => String(set.weight || set.previousWeight || '').trim()));
           const fields = getExerciseFieldConfig(exercise, showAddedWeight);
-          const trackingLabel = formatTrackingLabel(exercise.tracking);
           const isFavorite = favoriteExercises.map(normalizeName).includes(normalizeName(exercise.name));
           return (
             <section key={exercise.id} className="exercise-card">
@@ -1568,8 +1882,8 @@ function ActiveWorkoutScreen({
                 <button
                   type="button"
                   className="exercise-thumbnail-button"
-                  onClick={() => setDetailExerciseId(exercise.id)}
-                  aria-label={`Open media for ${exercise.name || 'exercise'}`}
+                  onClick={() => setPhotoPreviewExerciseId(exercise.id)}
+                  aria-label={`Preview photo for ${exercise.name || 'exercise'}`}
                 >
                   <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} />
                 </button>
@@ -1587,11 +1901,6 @@ function ActiveWorkoutScreen({
                       <option key={option.name} value={option.name} />
                     ))}
                   </datalist>
-                  <div className="exercise-meta-row">
-                    {[meta.muscle, meta.equipment, trackingLabel].filter(Boolean).map((item) => (
-                      <span key={item} className="tiny-label">{item}</span>
-                    ))}
-                  </div>
                   <p className="last-time" title={lastTime ? `Previous: ${lastTime}` : 'Previous: no saved workout yet.'}>
                     {lastTime ? `Previous: ${lastTime}` : 'Previous: no saved workout yet.'}
                   </p>
@@ -1639,57 +1948,64 @@ function ActiveWorkoutScreen({
               ) : null}
 
               <div className="set-stack">
-                {exercise.sets.map((set, setIndex) => (
-                  <div key={set.id} className="set-row-wrap">
-                    <div className="set-row" style={getSetGridStyle(fields.length)}>
-                      <span className="set-number">{setIndex + 1}</span>
-                      {fields.map((field) => (
-                        <label key={field.key} className="set-field">
-                          <span className="sr-only">{field.label}</span>
-                          <input
-                            inputMode={field.inputMode}
-                            type={field.type}
-                            placeholder={set[field.previousKey] || field.placeholder}
-                            value={set[field.key] || ''}
-                            onChange={(event) => updateSet(exercise.id, set.id, field.key, event.target.value)}
-                            onBlur={(event) => handleSetBlur(exercise.id, set.id, event)}
-                            className={[
-                              set[field.previousKey] !== '' ? 'input-with-history' : '',
-                              lastEditedFieldId === `${exercise.id}-${set.id}-${field.key}` ? 'last-edited-input' : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' ')}
-                          />
-                        </label>
-                      ))}
-                      <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
-                        <X size={16} strokeWidth={2.4} />
-                      </button>
-                    </div>
-                    {normalizeTracking(exercise.tracking) === 'distance/time' && isSetComplete(set, exercise.tracking) ? (
-                      <div className="set-subtext">Pace {formatPace(set.distance, set.duration)}</div>
-                    ) : null}
-                    {getCurrentSetPrs(set, records, exercise.tracking).length ? (
-                      <div className="pr-row">
-                        {getCurrentSetPrs(set, records, exercise.tracking).slice(0, 2).map((label) => (
-                          label.startsWith('1RM:') ? (
-                            <button
-                              key={label}
-                              type="button"
-                              className="pr-pill pr-info-button"
-                              onClick={() => setShowOneRepMaxInfo(true)}
-                            >
-                              {label}
-                              <Info size={12} strokeWidth={2.4} />
-                            </button>
-                          ) : (
-                            <span key={label} className="pr-pill">{label}</span>
-                          )
+                {exercise.sets.map((set, setIndex) => {
+                  const setPrs = prBySetId.get(set.id) || [];
+                  return (
+                    <div key={set.id} className="set-row-wrap">
+                      <div className="set-row" style={getSetGridStyle(fields.length)}>
+                        <span className="set-number">{setIndex + 1}</span>
+                        {fields.map((field) => (
+                          <label key={field.key} className="set-field">
+                            <span className="sr-only">{field.label}</span>
+                            <input
+                              inputMode={field.inputMode}
+                              type={field.type}
+                              placeholder={getSetFieldPlaceholder(set, field)}
+                              value={set[field.key] || ''}
+                              onChange={(event) => updateSet(exercise.id, set.id, field.key, event.target.value)}
+                              onBlur={(event) => handleSetBlur(exercise.id, set.id, event)}
+                              className={[
+                                set[field.previousKey] !== '' ? 'input-with-history' : '',
+                                lastEditedFieldId === `${exercise.id}-${set.id}-${field.key}` ? 'last-edited-input' : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                            />
+                          </label>
                         ))}
+                        <button type="button" className="mini-icon-button" onClick={() => removeSet(exercise.id, set.id)} aria-label="Remove set">
+                          <X size={16} strokeWidth={2.4} />
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
-                ))}
+                      {normalizeTracking(exercise.tracking) === 'distance/time' && isSetComplete(set, exercise.tracking) ? (
+                        <div className="set-subtext">Pace {formatPace(set.distance, set.duration)}</div>
+                      ) : null}
+                      {setPrs.length ? (
+                        <div className="pr-row">
+                          {setPrs.slice(0, 2).map((achievement) => (
+                            achievement.info ? (
+                              <button
+                                key={achievement.id}
+                                type="button"
+                                className="pr-pill pr-info-button"
+                                onClick={() => setShowOneRepMaxInfo(true)}
+                              >
+                                <Trophy size={12} strokeWidth={2.4} />
+                                {achievement.label}
+                                <Info size={12} strokeWidth={2.4} />
+                              </button>
+                            ) : (
+                              <span key={achievement.id} className="pr-pill">
+                                <Trophy size={12} strokeWidth={2.4} />
+                                {achievement.label}
+                              </span>
+                            )
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
 
               <button type="button" className="secondary-button" onClick={() => addSet(exercise.id)}>
@@ -1787,6 +2103,11 @@ function ActiveWorkoutScreen({
         onMediaChange={(media) => {
           if (detailExercise) updateExerciseMedia(detailExercise.id, media);
         }}
+      />
+      <PhotoPreviewModal
+        exercise={photoPreviewExercise}
+        mediaLibrary={mediaLibrary}
+        onClose={() => setPhotoPreviewExerciseId(null)}
       />
     </div>
   );
@@ -2139,7 +2460,7 @@ function MiniChart({ points, metricLabel, metricId }) {
   );
 }
 
-function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, onImport, onReset }) {
+function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, appleWatchReminderEnabled, onAppleWatchReminderChange, onImport, onReset }) {
   const exportData = () => {
     const blob = new Blob(
       [
@@ -2189,6 +2510,20 @@ function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, o
           <p>Machine photos are saved inside that backup as small compressed image data, so camera-added thumbnails can come back on import.</p>
           <p>Clearing Safari website data, removing browser app data, or switching phones without restoring that browser data can remove your saved workouts. Normal app updates and page refreshes should not delete them.</p>
         </div>
+        <section className="preference-card">
+          <div>
+            <strong>Workout reminders</strong>
+            <p>Show the Apple Watch reminder before starting workouts.</p>
+          </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={appleWatchReminderEnabled}
+              onChange={(event) => onAppleWatchReminderChange(event.target.checked)}
+            />
+            <span>Remind me before workouts</span>
+          </label>
+        </section>
         <div className="backup-actions">
           <button type="button" className="primary-button" onClick={exportData}>
             <FileArchive size={18} strokeWidth={2.2} />
@@ -2225,6 +2560,8 @@ export default function App() {
   const [timerActive, setTimerActive] = useState(false);
   const [timerEndsAt, setTimerEndsAt] = useState(null);
   const [confettiBursts, setConfettiBursts] = useState([]);
+  const [appleWatchReminderEnabled, setAppleWatchReminderEnabled] = useState(() => readAppleWatchReminderEnabled());
+  const [pendingWorkoutStart, setPendingWorkoutStart] = useState(null);
 
   useEffect(() => {
     saveData({ workouts });
@@ -2327,7 +2664,7 @@ export default function App() {
     };
   }, [timerActive, timerEndsAt]);
 
-  const startWorkout = (type, customName = '') => {
+  const beginWorkout = (type, customName = '') => {
     if (hasWorkoutContent(activeWorkout) && !window.confirm('Start a new workout and replace your unfinished draft?')) return;
     setActiveWorkout(createWorkout(type, customName, workouts));
     setShowResumePrompt(false);
@@ -2337,7 +2674,15 @@ export default function App() {
     setSecondsLeft(DEFAULT_REST_SECONDS);
   };
 
-  const startTemplateWorkout = (templateId) => {
+  const startWorkout = (type, customName = '') => {
+    if (appleWatchReminderEnabled) {
+      setPendingWorkoutStart({ kind: 'workout', type, customName });
+      return;
+    }
+    beginWorkout(type, customName);
+  };
+
+  const beginTemplateWorkout = (templateId) => {
     const template = workoutTemplates.find((item) => item.id === templateId);
     if (!template) return;
     if (hasWorkoutContent(activeWorkout) && !window.confirm('Start this template and replace your unfinished workout draft?')) return;
@@ -2350,6 +2695,24 @@ export default function App() {
     setTimerActive(false);
     setTimerEndsAt(null);
     setSecondsLeft(DEFAULT_REST_SECONDS);
+  };
+
+  const startTemplateWorkout = (templateId) => {
+    if (appleWatchReminderEnabled) {
+      setPendingWorkoutStart({ kind: 'template', templateId });
+      return;
+    }
+    beginTemplateWorkout(templateId);
+  };
+
+  const continuePendingWorkoutStart = (remindBeforeWorkouts) => {
+    saveAppleWatchReminderEnabled(remindBeforeWorkouts);
+    setAppleWatchReminderEnabled(remindBeforeWorkouts);
+    const pending = pendingWorkoutStart;
+    setPendingWorkoutStart(null);
+    if (!pending) return;
+    if (pending.kind === 'template') beginTemplateWorkout(pending.templateId);
+    else beginWorkout(pending.type, pending.customName);
   };
 
   const saveActiveWorkoutAsTemplate = () => {
@@ -2498,6 +2861,7 @@ export default function App() {
     setWorkoutTemplates([]);
     setFavoriteExercises([]);
     setMediaLibrary({});
+    setAppleWatchReminderEnabled(true);
     setActiveWorkout(null);
     saveActiveWorkout(null);
     setShowResumePrompt(false);
@@ -2508,6 +2872,7 @@ export default function App() {
     localStorage.removeItem(WORKOUT_TEMPLATES_KEY);
     localStorage.removeItem(FAVORITE_EXERCISES_KEY);
     localStorage.removeItem(WGER_MEDIA_CACHE_KEY);
+    localStorage.removeItem(APPLE_WATCH_REMINDER_KEY);
     setTab('Workout');
   };
 
@@ -2549,6 +2914,7 @@ export default function App() {
           draftWorkout={activeWorkout}
           onResumeDraft={() => setShowResumePrompt(false)}
           onDiscardDraft={changeWorkout}
+          workouts={workouts}
         />
       )
     ) : tab === 'History' ? (
@@ -2572,6 +2938,11 @@ export default function App() {
         templates={workoutTemplates}
         activeWorkout={activeWorkout}
         favoriteExercises={favoriteExercises}
+        appleWatchReminderEnabled={appleWatchReminderEnabled}
+        onAppleWatchReminderChange={(enabled) => {
+          saveAppleWatchReminderEnabled(enabled);
+          setAppleWatchReminderEnabled(enabled);
+        }}
         onImport={importText}
         onReset={resetData}
       />
@@ -2581,6 +2952,13 @@ export default function App() {
     <div className="app-shell">
       <ConfettiLayer bursts={confettiBursts} />
       {content}
+      {pendingWorkoutStart ? (
+        <AppleWatchReminderModal
+          defaultRemind={appleWatchReminderEnabled}
+          onContinue={continuePendingWorkoutStart}
+          onClose={() => setPendingWorkoutStart(null)}
+        />
+      ) : null}
       <BottomNav tab={tab} onChange={setTab} />
     </div>
   );
