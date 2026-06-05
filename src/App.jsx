@@ -21,6 +21,7 @@ import {
   History,
   Info,
   ListFilter,
+  MoreHorizontal,
   MoveHorizontal,
   Footprints,
   Play,
@@ -532,7 +533,7 @@ function formatPreviousSetSummary(set, tracking = 'weight/reps') {
   const normalizedTracking = normalizeTracking(tracking);
   if (!isSetComplete(set, normalizedTracking)) return '';
   if (normalizedTracking === 'weight/reps') {
-    return `${formatDistance(set.weight)} x ${formatNumber(parseNumericValue(set.reps))}`;
+    return `${formatDistance(set.weight)}×${formatNumber(parseNumericValue(set.reps))}`;
   }
   if (normalizedTracking === 'bodyweight') {
     const addedWeight = parseNumericValue(set.weight);
@@ -1105,7 +1106,7 @@ function getLastPerformanceMap(workouts) {
         const normalized = normalizeName(exercise.name);
         if (!normalized || map.has(normalized)) return;
         const completeSets = (exercise.sets || []).filter((set) => isSetComplete(set, exercise.tracking));
-        if (completeSets.length) map.set(normalized, completeSets.map((set) => formatPreviousSetSummary(set, exercise.tracking)).join(' • '));
+        if (completeSets.length) map.set(normalized, completeSets.map((set) => formatPreviousSetSummary(set, exercise.tracking)).join(' · '));
       });
     });
   return map;
@@ -1632,7 +1633,7 @@ function getExerciseFieldConfig(exercise, showAddedWeight = false) {
 }
 
 function getSetGridStyle(fieldCount) {
-  return { gridTemplateColumns: `40px repeat(${fieldCount}, minmax(0, 1fr)) 34px` };
+  return { gridTemplateColumns: `40px repeat(${fieldCount}, minmax(0, 1fr)) 44px` };
 }
 
 function getSetFieldPlaceholder(set, field) {
@@ -2353,6 +2354,7 @@ function ActiveWorkoutScreen({
   const [showOneRepMaxInfo, setShowOneRepMaxInfo] = useState(false);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
   const [photoPreviewExerciseId, setPhotoPreviewExerciseId] = useState(null);
+  const [openExerciseMenuId, setOpenExerciseMenuId] = useState(null);
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises),
     [workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises],
@@ -2368,6 +2370,25 @@ function ActiveWorkoutScreen({
   );
   const visibleSuggestions = normalizeName(exerciseInput) ? suggestions : (recentExercises.length ? recentExercises : suggestions);
   const suggestionLabel = normalizeName(exerciseInput) ? 'Matches' : recentExercises.length ? 'Recently used' : 'Suggested';
+
+  useEffect(() => {
+    if (!openExerciseMenuId) return undefined;
+
+    const closeMenu = (event) => {
+      if (event.target.closest?.('.exercise-menu')) return;
+      setOpenExerciseMenuId(null);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpenExerciseMenuId(null);
+    };
+
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openExerciseMenuId]);
 
   const updateWorkoutNotes = (notes) => {
     onUpdate({ ...workout, notes });
@@ -2499,7 +2520,7 @@ function ActiveWorkoutScreen({
   const photoPreviewExercise = workout.exercises.find((exercise) => exercise.id === photoPreviewExerciseId);
 
   return (
-    <div className="screen">
+    <div className="screen active-workout-screen">
       <header className="session-header">
         <div className="session-title">
           <button type="button" className="back-link" onClick={() => onUpdate(null)}>
@@ -2537,13 +2558,12 @@ function ActiveWorkoutScreen({
                   <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} />
                 </button>
                 <div className="exercise-title-wrap">
-                  <input
+                  <textarea
                     className="exercise-title-input"
-                    type="text"
                     value={exercise.name}
                     placeholder="Exercise name"
-                    list={`exercise-options-${exercise.id}`}
-                    onChange={(event) => updateExerciseName(exercise.id, event.target.value)}
+                    rows={2}
+                    onChange={(event) => updateExerciseName(exercise.id, event.target.value.replace(/\s*\n\s*/g, ' '))}
                   />
                   <datalist id={`exercise-options-${exercise.id}`}>
                     {exerciseOptions.map((option) => (
@@ -2554,27 +2574,77 @@ function ActiveWorkoutScreen({
                     {lastTime ? `Previous: ${lastTime}` : 'Previous: no saved workout yet.'}
                   </p>
                 </div>
-                <div className="exercise-actions">
+                <div className="exercise-menu">
                   <button
                     type="button"
-                    className={`icon-button ${isFavorite ? 'favorite-active' : ''}`}
-                    onClick={() => onToggleFavorite(exercise.name)}
-                    aria-label={isFavorite ? 'Remove favorite' : 'Favorite exercise'}
+                    className="icon-button exercise-menu-button"
+                    onClick={() => setOpenExerciseMenuId((current) => (current === exercise.id ? null : exercise.id))}
+                    aria-label="Exercise actions"
+                    aria-expanded={openExerciseMenuId === exercise.id}
+                    aria-controls={`exercise-menu-${exercise.id}`}
                   >
-                    <Star size={16} strokeWidth={2.4} fill={isFavorite ? 'currentColor' : 'none'} />
+                    <MoreHorizontal size={20} strokeWidth={2.4} />
                   </button>
-                  <button type="button" className="icon-button" onClick={() => setDetailExerciseId(exercise.id)} aria-label="Exercise media">
-                    <Info size={16} strokeWidth={2.4} />
-                  </button>
-                  <button type="button" className="icon-button" onClick={() => moveExercise(index, -1)} aria-label="Move up">
-                    <ArrowUp size={16} strokeWidth={2.4} />
-                  </button>
-                  <button type="button" className="icon-button" onClick={() => moveExercise(index, 1)} aria-label="Move down">
-                    <ArrowDown size={16} strokeWidth={2.4} />
-                  </button>
-                  <button type="button" className="icon-button danger" onClick={() => removeExercise(exercise.id)} aria-label="Remove exercise">
-                    <Trash2 size={16} strokeWidth={2.2} />
-                  </button>
+                  {openExerciseMenuId === exercise.id ? (
+                    <div className="exercise-overflow-menu" id={`exercise-menu-${exercise.id}`} role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          onToggleFavorite(exercise.name);
+                          setOpenExerciseMenuId(null);
+                        }}
+                      >
+                        <Star size={16} strokeWidth={2.4} fill={isFavorite ? 'currentColor' : 'none'} />
+                        {isFavorite ? 'Unfavorite' : 'Favorite'}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setDetailExerciseId(exercise.id);
+                          setOpenExerciseMenuId(null);
+                        }}
+                      >
+                        <Info size={16} strokeWidth={2.4} />
+                        Exercise info
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          moveExercise(index, -1);
+                          setOpenExerciseMenuId(null);
+                        }}
+                      >
+                        <ArrowUp size={16} strokeWidth={2.4} />
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          moveExercise(index, 1);
+                          setOpenExerciseMenuId(null);
+                        }}
+                      >
+                        <ArrowDown size={16} strokeWidth={2.4} />
+                        Move down
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="danger"
+                        onClick={() => {
+                          removeExercise(exercise.id);
+                          setOpenExerciseMenuId(null);
+                        }}
+                      >
+                        <Trash2 size={16} strokeWidth={2.2} />
+                        Delete exercise
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
