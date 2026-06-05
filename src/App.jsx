@@ -1320,6 +1320,9 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   const name = normalizeName(exercise.name);
   const muscle = exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '';
   const groups = [];
+  const isLowerBodyMovement =
+    ['Quads', 'Hamstrings', 'Glutes', 'Calves'].includes(muscle) ||
+    /leg press|leg extension|leg curl|hamstring curl|nordic|squat|lunge|split squat|step up|calf|hip thrust|glute|kickback|abduction|adduction|romanian|stiff leg/.test(name);
 
   if (/bench|incline|decline|chest|fly|pec|crossover|push up|pullover|dip/.test(name) || muscle === 'Chest') groups.push('Chest / pecs');
   if (/shrug|upright row|face pull|deadlift|clean|farmer|carry/.test(name)) groups.push('Traps');
@@ -1327,9 +1330,9 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   if (/shoulder press|overhead press|arnold|front raise|bench|incline|push up|clean and press/.test(name)) groups.push('Front delts');
   if (/lateral raise|upright row|shoulder press|arnold|machine shoulder/.test(name)) groups.push('Side delts');
   if (/rear delt|face pull|reverse pec|row/.test(name)) groups.push('Rear delts');
-  if (/curl|chin up|pull up|pulldown|row/.test(name) || muscle === 'Biceps') groups.push('Biceps');
-  if (/tricep|skull|dip|bench|press|push up|extension/.test(name) || muscle === 'Triceps') groups.push('Triceps');
-  if (/hammer curl|reverse curl|wrist|farmer|carry|grip|forearm|deadlift|shrug/.test(name) || muscle === 'Forearms') groups.push('Forearms');
+  if ((!isLowerBodyMovement && /bicep|barbell curl|ez bar curl|hammer curl|preacher curl|incline dumbbell curl|cable curl|concentration curl|chin up|pull up|pulldown|row/.test(name)) || muscle === 'Biceps') groups.push('Biceps');
+  if ((!isLowerBodyMovement && /tricep|skull|dip|bench|chest press|shoulder press|overhead press|push up|close grip|rope pushdown|pushdown|tricep extension/.test(name)) || muscle === 'Triceps') groups.push('Triceps');
+  if ((!isLowerBodyMovement && /hammer curl|reverse curl|wrist|farmer|carry|grip|forearm|deadlift|shrug/.test(name)) || muscle === 'Forearms') groups.push('Forearms');
   if (/plank|crunch|knee raise|leg raise|dead bug|pallof|core|ab|sit up|twist|wood chop|rollout|slam/.test(name) || muscle === 'Core') groups.push('Abs / core');
   if (/hip thrust|glute|kickback|deadlift|squat|leg press|lunge|split squat|step up|abduction|swing|sled/.test(name) || muscle === 'Glutes') groups.push('Glutes');
   if (/squat|leg press|leg extension|lunge|split squat|step up|quad|sled/.test(name) || muscle === 'Quads') groups.push('Quads');
