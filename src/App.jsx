@@ -1865,11 +1865,14 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
         </div>
         <div>
           <p className="eyebrow">Gym Log</p>
-          <h1>What are you training today?</h1>
         </div>
       </div>
 
       <DashboardPreview workouts={workouts} />
+
+      <div className="workout-picker-heading">
+        <h1>What are you training today?</h1>
+      </div>
 
       <div className="stack-lg">
         {draftWorkout ? (
