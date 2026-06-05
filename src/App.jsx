@@ -46,7 +46,7 @@ const FAVORITE_EXERCISES_KEY = `${STORAGE_KEY}-favorite-exercises`;
 const WGER_MEDIA_CACHE_KEY = `${STORAGE_KEY}-wger-media`;
 const APPLE_WATCH_REMINDER_KEY = `${STORAGE_KEY}-apple-watch-reminder`;
 const RECOVERY_DAYS_KEY = `${STORAGE_KEY}-recovery-days`;
-const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Backup'];
+const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Settings'];
 const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
 const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
 const CHART_METRIC_DEFINITIONS = {
@@ -919,6 +919,21 @@ function getExerciseOptions(workouts, activeWorkout, category = 'All', mediaLibr
   });
 }
 
+function getRecentlyUsedExerciseOptions(workouts = [], options = []) {
+  const byName = new Map(options.map((exercise) => [normalizeName(exercise.name), exercise]));
+  const seen = new Set();
+  return [...workouts]
+    .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))
+    .flatMap((workout) => workout.exercises || [])
+    .map((exercise) => byName.get(normalizeName(exercise.name)))
+    .filter((exercise) => {
+      if (!exercise || seen.has(normalizeName(exercise.name))) return false;
+      seen.add(normalizeName(exercise.name));
+      return true;
+    })
+    .slice(0, 8);
+}
+
 function getWorkoutTime(workout) {
   return new Date(workout.startedAt || `${workout.date}T12:00:00`).getTime();
 }
@@ -1177,12 +1192,122 @@ function getWorkoutDurationSeconds(workout = {}) {
   return Math.round((end - start) / 1000);
 }
 
+function getSafeWorkoutDurationSeconds(workout = {}) {
+  const duration = getWorkoutDurationSeconds(workout);
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  return duration > 60 * 60 * 12 ? null : duration;
+}
+
+function formatDurationReadable(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours > 0 && remainingMinutes > 0) return `${hours}h ${remainingMinutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+}
+
+function formatRelativeDate(dateKey) {
+  if (!dateKey) return 'No history yet';
+  const daysAgo = getDayDifference(dateKey);
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+  if (daysAgo < 14) return `${daysAgo} days ago`;
+  return formatShortDate(dateKey).replace(/, \d{4}/, '');
+}
+
+function getWorkoutTypeInsights(workouts = [], recovery = []) {
+  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
+  return TEMPLATE_ORDER.map((type) => {
+    const lastWorkout = [...workouts]
+      .filter((workout) => normalizeWorkoutType(workout.type) === type)
+      .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))[0];
+    const templateMuscles = uniqueValues(
+      (TEMPLATES[type] || [])
+        .map((exerciseName) => getExerciseMeta(exerciseName)?.muscle)
+        .flatMap((muscle) => getExerciseRecoveryMuscles({ muscle })),
+    );
+    const states = templateMuscles.map((muscle) => recoveryByMuscle.get(muscle)?.state || 'inactive');
+    const trainedToday = Boolean(lastWorkout?.date === todayValue()) || states.includes('fatigued');
+    const recoveringCount = states.filter((state) => state === 'recovering').length;
+    const readyCount = states.filter((state) => state === 'ready').length;
+    const status = trainedToday
+      ? { label: 'Trained today', tone: 'fatigued' }
+      : recoveringCount > readyCount
+        ? { label: 'Recovering', tone: 'recovering' }
+        : recoveringCount > 0
+          ? { label: 'Mostly ready', tone: 'recovering' }
+          : { label: 'Ready', tone: 'ready' };
+
+    return {
+      type,
+      lastWorkout,
+      lastText: lastWorkout ? `Last trained ${formatRelativeDate(lastWorkout.date)}` : 'No recent workout',
+      status,
+      readyCount,
+      recoveringCount,
+    };
+  });
+}
+
+function getRecoveryOverview(workouts = [], recoveryDays = DEFAULT_RECOVERY_DAYS) {
+  const recovery = calculateMuscleRecovery(workouts, recoveryDays);
+  const ready = recovery.filter((item) => item.state === 'ready');
+  const recovering = recovery.filter((item) => item.state === 'recovering');
+  const fatigued = recovery.filter((item) => item.state === 'fatigued');
+  const tracked = recovery.filter((item) => item.lastTrainedDate);
+  const recoveredPercent = tracked.length
+    ? Math.round((tracked.reduce((total, item) => total + item.recoveryPercent, 0) / tracked.length) * 100)
+    : null;
+
+  return { recovery, ready, recovering, fatigued, recoveredPercent };
+}
+
+function getSuggestedWorkout(insights = []) {
+  const candidates = insights.filter((item) => item.type !== 'Cardio' && item.status.tone !== 'fatigued');
+  const scored = (candidates.length ? candidates : insights).map((item) => ({
+    ...item,
+    score:
+      (item.status.tone === 'ready' ? 30 : item.status.tone === 'recovering' ? 12 : 0)
+      + item.readyCount * 4
+      + (item.lastWorkout ? Math.min(getDayDifference(item.lastWorkout.date), 14) : 14),
+  }));
+  return scored.sort((a, b) => b.score - a.score)[0] || insights[0] || { type: 'Push' };
+}
+
+function getWorkoutStats(workouts = []) {
+  const weekStart = getWeekStart(getLocalDateFromKey(todayValue()));
+  const thisWeek = workouts.filter((workout) => getLocalDateFromKey(workout.date) >= weekStart).length;
+  const totalSets = workouts.reduce(
+    (total, workout) => total + (workout.exercises || []).reduce((sum, exercise) => sum + getCompletedSetCount(exercise), 0),
+    0,
+  );
+  const totalTime = workouts.reduce((total, workout) => total + (getSafeWorkoutDurationSeconds(workout) || 0), 0);
+  const workoutDates = [...new Set(workouts.map((workout) => workout.date).filter(Boolean))].sort().reverse();
+  let streak = 0;
+  let cursor = todayValue();
+  while (workoutDates.includes(cursor)) {
+    streak += 1;
+    cursor = getDateKey(addDays(getLocalDateFromKey(cursor), -1));
+  }
+
+  return {
+    totalWorkouts: workouts.length,
+    currentStreak: streak,
+    thisWeek,
+    totalSets,
+    totalTime,
+    lastWorkout: [...workouts].sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a))[0] || null,
+  };
+}
+
 function getWorkoutDaySummary(workouts = []) {
   return workouts.reduce((summary, workout) => {
     if (!workout.date) return summary;
     const exercises = (workout.exercises || []).filter((exercise) => getCompletedSetCount(exercise) > 0);
     const totalSets = exercises.reduce((total, exercise) => total + getCompletedSetCount(exercise), 0);
-    const duration = getWorkoutDurationSeconds(workout);
+    const duration = getSafeWorkoutDurationSeconds(workout);
     const current = summary.get(workout.date) || {
       date: workout.date,
       workoutNames: [],
@@ -1388,6 +1513,13 @@ function getRecoveryPercent(daysAgo, recoveryDays = DEFAULT_RECOVERY_DAYS) {
   return Math.min(100, Math.max(18, Math.round((daysAgo / daysToReady) * 100)));
 }
 
+function getRecoveryStatusLabel(item = {}) {
+  if (item.state === 'ready') return 'Ready';
+  if (item.state === 'recovering') return 'Recovering';
+  if (item.state === 'fatigued') return 'Trained today';
+  return 'No history yet';
+}
+
 function getEstimatedReadyDate(lastTrainedDate, recoveryDays = DEFAULT_RECOVERY_DAYS) {
   if (!lastTrainedDate) return '';
   return getDateKey(addDays(getLocalDateFromKey(lastTrainedDate), getRecoveryDaysToReady(recoveryDays)));
@@ -1553,7 +1685,7 @@ function BottomNav({ tab, onChange }) {
     Templates: ClipboardList,
     History,
     Charts: ChartColumn,
-    Backup: FileArchive,
+    Settings: Shield,
   };
   const tabLabels = {
     Charts: 'Progress',
@@ -1576,6 +1708,53 @@ function BottomNav({ tab, onChange }) {
         );
       })}
     </nav>
+  );
+}
+
+function PageHeader({ title, subtitle }) {
+  return (
+    <header className="page-header">
+      <h1>{title}</h1>
+      {subtitle ? <p>{subtitle}</p> : null}
+    </header>
+  );
+}
+
+function SectionHeader({ title, action }) {
+  return (
+    <div className="section-header">
+      <h2>{title}</h2>
+      {action ? <div>{action}</div> : null}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="stat-card">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon = Dumbbell, title, body, action }) {
+  return (
+    <div className="empty-panel compact-empty">
+      <Icon size={24} strokeWidth={2.2} />
+      <strong>{title}</strong>
+      <p>{body}</p>
+      {action}
+    </div>
+  );
+}
+
+function SettingsSection({ title, children }) {
+  return (
+    <section className="settings-section">
+      <h2>{title}</h2>
+      <div className="settings-section-body">{children}</div>
+    </section>
   );
 }
 
@@ -1611,6 +1790,7 @@ function WorkoutConsistencyCalendar({ workouts }) {
       <div className="dashboard-card-head">
         <div>
           <strong>Consistency</strong>
+          <p>Newest days are on the right.</p>
         </div>
         <CalendarRange size={18} strokeWidth={2.2} />
       </div>
@@ -1620,9 +1800,20 @@ function WorkoutConsistencyCalendar({ workouts }) {
             <button
               key={day.date}
               type="button"
-              className={`consistency-day ${day.workedOut ? 'worked-out' : ''} ${day.isToday ? 'today' : ''} ${selectedDay?.date === day.date ? 'selected' : ''}`}
+              className={[
+                'consistency-day',
+                day.workedOut ? 'worked-out' : '',
+                day.summary?.totalSets >= 18 ? 'intensity-high' : day.summary?.totalSets >= 8 ? 'intensity-medium' : '',
+                day.isToday ? 'today' : '',
+                selectedDay?.date === day.date ? 'selected' : '',
+              ].filter(Boolean).join(' ')}
               style={{ gridColumn: day.weekIndex, gridRow: day.dayOfWeek + 1 }}
-              title={formatShortDate(day.date)}
+              title={[
+                formatShortDate(day.date),
+                day.summary?.workoutNames?.join(', '),
+                day.summary?.durations?.[0] ? formatDurationReadable(day.summary.durations.reduce((sum, value) => sum + value, 0)) : '',
+                day.summary ? `${day.summary.exerciseCount} exercises, ${day.summary.totalSets} sets` : '',
+              ].filter(Boolean).join(' | ')}
               aria-label={formatShortDate(day.date)}
               onClick={() => setSelectedDay(day)}
             />
@@ -1632,6 +1823,18 @@ function WorkoutConsistencyCalendar({ workouts }) {
       {selectedDay ? (
         <div className="consistency-detail">
           <strong>{formatShortDate(selectedDay.date)}</strong>
+          {selectedDay.summary ? (
+            <>
+              <span>{selectedDay.summary.workoutNames.join(', ')}</span>
+              {selectedDay.summary.durations.length ? (
+                <span>{formatDurationReadable(selectedDay.summary.durations.reduce((sum, value) => sum + value, 0))}</span>
+              ) : null}
+              <span>{selectedDay.summary.exerciseCount} exercises</span>
+              <span>{selectedDay.summary.totalSets} sets</span>
+            </>
+          ) : (
+            <span>No workout logged</span>
+          )}
         </div>
       ) : null}
     </section>
@@ -1698,9 +1901,16 @@ function MuscleRecoveryCard({ workouts }) {
   const [showInfo, setShowInfo] = useState(false);
   const [selectedMuscle, setSelectedMuscle] = useState(null);
   const [recoveryDays, setRecoveryDays] = useState(() => readRecoveryDays());
-  const recovery = useMemo(() => calculateMuscleRecovery(workouts, recoveryDays), [workouts, recoveryDays]);
-  const readyMuscles = recovery.filter((item) => item.state === 'ready');
-  const readyText = readyMuscles.length ? readyMuscles.slice(0, 3).map((item) => item.muscle).join(' \u2022 ') : 'Log workouts to build recovery history';
+  const overview = useMemo(() => getRecoveryOverview(workouts, recoveryDays), [workouts, recoveryDays]);
+  const { recovery, ready, recovering, recoveredPercent } = overview;
+  const selected = recovery.find((item) => item.muscle === selectedMuscle);
+  const readyText = ready.length ? ready.slice(0, 4).map((item) => item.muscle).join(' | ') : 'Log workouts to build recovery history';
+  const recoveringText = recovering.length ? recovering.slice(0, 4).map((item) => item.muscle).join(' | ') : 'None';
+  const recoveryHeadline = recoveredPercent === null
+    ? 'Recovery builds as you log'
+    : recoveredPercent >= 85
+      ? `${recoveredPercent}% recovered`
+      : 'Some muscles are recovering';
   const updateRecoveryDays = (days) => {
     setRecoveryDays(days);
     saveRecoveryDays(days);
@@ -1710,13 +1920,20 @@ function MuscleRecoveryCard({ workouts }) {
     <section className="dashboard-card recovery-card">
       <div className="recovery-mockup-head">
         <div className="recovery-title-block">
-          <span className="premium-eyebrow">Recovery status</span>
-          <h2>Muscle Recovery</h2>
-          <p>
-            <CheckCircle2 size={18} strokeWidth={2.6} />
-            <strong>Ready to train:</strong>
-            <span>{readyText}</span>
-          </p>
+          <span className="premium-eyebrow">Recovery</span>
+          <h2>{recoveryHeadline}</h2>
+          <div className="recovery-summary-lines">
+            <p>
+              <CheckCircle2 size={18} strokeWidth={2.6} />
+              <strong>Ready:</strong>
+              <span>{readyText}</span>
+            </p>
+            <p>
+              <Timer size={18} strokeWidth={2.4} />
+              <strong>Recovering:</strong>
+              <span>{recoveringText}</span>
+            </p>
+          </div>
         </div>
         <div className="recovery-head-actions">
           <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
@@ -1729,6 +1946,21 @@ function MuscleRecoveryCard({ workouts }) {
         selectedMuscle={selectedMuscle}
         onSelect={(muscle) => setSelectedMuscle(muscle)}
       />
+      <div className="selected-muscle-panel" aria-live="polite">
+        {selected ? (
+          <>
+            <strong>{selected.muscle}</strong>
+            <span>{getRecoveryStatusLabel(selected)}</span>
+            {selected.lastTrainedDate ? <span>Last trained {formatRelativeDate(selected.lastTrainedDate)}</span> : <span>No logged training yet</span>}
+            {selected.exercises?.length ? <span>{selected.exercises.slice(0, 3).join(', ')}</span> : null}
+          </>
+        ) : (
+          <>
+            <strong>Tap a muscle</strong>
+            <span>See last trained date, recovery status, and recent exercises.</span>
+          </>
+        )}
+      </div>
       {showInfo ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setShowInfo(false)}>
           <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-info-title" onClick={(event) => event.stopPropagation()}>
@@ -1770,8 +2002,8 @@ function MuscleRecoveryCard({ workouts }) {
 function DashboardPreview({ workouts }) {
   return (
     <div className="dashboard-preview">
-      <WorkoutConsistencyCalendar workouts={workouts} />
       <MuscleRecoveryCard workouts={workouts} />
+      <WorkoutConsistencyCalendar workouts={workouts} />
     </div>
   );
 }
@@ -1836,10 +2068,71 @@ function PhotoPreviewModal({ exercise, mediaLibrary = {}, onClose }) {
   );
 }
 
+function TodayActionCard({ draftWorkout, suggestedWorkout, readyMuscles, onStart, onResumeDraft, onDiscardDraft }) {
+  const readyText = readyMuscles.length
+    ? readyMuscles.slice(0, 4).map((item) => item.muscle).join(' | ')
+    : 'Start logging to build recovery guidance';
+  const label = suggestedWorkout?.type || 'Push';
+
+  return (
+    <section className="today-card">
+      <div className="today-card-copy">
+        <span className="eyebrow">Today</span>
+        <h1>{draftWorkout ? 'Continue last workout' : 'Ready to train'}</h1>
+        <p>{draftWorkout ? draftWorkout.label || 'Unfinished workout' : readyText}</p>
+        {draftWorkout ? (
+          <span className="today-suggestion">{formatLongDate(draftWorkout.date)}</span>
+        ) : (
+          <span className="today-suggestion">Suggested: {label}</span>
+        )}
+      </div>
+      <div className="today-card-actions">
+        {draftWorkout ? (
+          <>
+            <button type="button" className="primary-button today-primary" onClick={onResumeDraft}>
+              <Play size={18} strokeWidth={2.4} />
+              Continue Workout
+            </button>
+            <button type="button" className="text-link inline-link danger-link" onClick={onDiscardDraft}>
+              Discard draft
+            </button>
+          </>
+        ) : (
+          <button type="button" className="primary-button today-primary" onClick={() => onStart(label)}>
+            <Play size={18} strokeWidth={2.4} />
+            Start Workout
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function WorkoutTypeCard({ insight, onStart }) {
+  const { type, lastText, status } = insight;
+  return (
+    <button type="button" className="workout-type-card" onClick={() => onStart(type)}>
+      <CategoryMediaBadge type={type} />
+      <span className="workout-type-copy">
+        <strong>{type}</strong>
+        <small>{lastText}</small>
+      </span>
+      <span className={`status-dot-label ${status.tone}`}>{status.label}</span>
+    </button>
+  );
+}
+
 function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDraft, workouts }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const customSheetRef = useRef(null);
+  const recoveryDays = useMemo(() => readRecoveryDays(), []);
+  const recoveryOverview = useMemo(() => getRecoveryOverview(workouts, recoveryDays), [workouts, recoveryDays]);
+  const workoutInsights = useMemo(
+    () => getWorkoutTypeInsights(workouts, recoveryOverview.recovery),
+    [workouts, recoveryOverview.recovery],
+  );
+  const suggestedWorkout = useMemo(() => getSuggestedWorkout(workoutInsights), [workoutInsights]);
 
   useEffect(() => {
     if (!showCustom) return;
@@ -1848,61 +2141,23 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
 
   return (
     <div className="screen screen-home">
-      <div className="brand-lockup">
-        <div className="brand-icon" aria-hidden="true">
-          <span className="brand-mark">
-            <span className="brand-rack-upright left" />
-            <span className="brand-rack-upright right" />
-            <span className="brand-rack-base" />
-            <span className="brand-rack-bench" />
-            <span className="brand-rack-post" />
-            <span className="brand-rack-barbell" />
-            <span className="brand-rack-weight left outer" />
-            <span className="brand-rack-weight left inner" />
-            <span className="brand-rack-weight right inner" />
-            <span className="brand-rack-weight right outer" />
-          </span>
+      <TodayActionCard
+        draftWorkout={draftWorkout}
+        suggestedWorkout={suggestedWorkout}
+        readyMuscles={recoveryOverview.ready}
+        onStart={onStart}
+        onResumeDraft={onResumeDraft}
+        onDiscardDraft={onDiscardDraft}
+      />
+
+      <section className="workout-picker-section">
+        <SectionHeader title="What are you training today?" />
+        <div className="workout-type-grid">
+          {workoutInsights.map((insight) => (
+            <WorkoutTypeCard key={insight.type} insight={insight} onStart={onStart} />
+          ))}
         </div>
-        <div>
-          <p className="eyebrow">Gym Log</p>
-        </div>
-      </div>
-
-      <DashboardPreview workouts={workouts} />
-
-      <div className="workout-picker-heading">
-        <h1>What are you training today?</h1>
-      </div>
-
-      <div className="stack-lg">
-        {draftWorkout ? (
-          <section className="template-card resume-card">
-            <div className="template-copy">
-              <strong>Resume workout</strong>
-              <p>{draftWorkout.label || 'Unfinished workout'}</p>
-              <p className="history-meta">{formatLongDate(draftWorkout.date)}</p>
-            </div>
-            <div className="template-actions">
-              <button type="button" className="primary-button small" onClick={onResumeDraft}>
-                <Play size={16} strokeWidth={2.4} />
-                Resume
-              </button>
-              <button type="button" className="icon-button danger" onClick={onDiscardDraft} aria-label="Discard workout draft">
-                <Trash2 size={16} strokeWidth={2.2} />
-              </button>
-            </div>
-          </section>
-        ) : null}
-        {TEMPLATE_ORDER.map((item) => (
-          <button key={item} type="button" className="workout-choice" onClick={() => onStart(item)}>
-            <CategoryMediaBadge type={item} />
-            <span className="workout-choice-label">{item}</span>
-            <strong>
-              <ArrowRight size={24} strokeWidth={2.4} />
-            </strong>
-          </button>
-        ))}
-      </div>
+      </section>
 
       {!showCustom ? (
         <button type="button" className="text-link" onClick={() => setShowCustom(true)}>
@@ -1940,6 +2195,8 @@ function ChooseWorkoutScreen({ onStart, draftWorkout, onResumeDraft, onDiscardDr
           </button>
         </div>
       )}
+
+      <DashboardPreview workouts={workouts} />
     </div>
   );
 }
@@ -2176,6 +2433,12 @@ function ActiveWorkoutScreen({
     const ordered = exerciseOptions.filter((exercise) => !query || normalizeName(exercise.name).includes(query));
     return ordered.slice(0, 10);
   }, [exerciseInput, exerciseOptions]);
+  const recentExercises = useMemo(
+    () => getRecentlyUsedExerciseOptions(workouts, exerciseOptions),
+    [workouts, exerciseOptions],
+  );
+  const visibleSuggestions = normalizeName(exerciseInput) ? suggestions : (recentExercises.length ? recentExercises : suggestions);
+  const suggestionLabel = normalizeName(exerciseInput) ? 'Matches' : recentExercises.length ? 'Recently used' : 'Suggested';
 
   const updateWorkoutNotes = (notes) => {
     onUpdate({ ...workout, notes });
@@ -2510,8 +2773,11 @@ function ActiveWorkoutScreen({
             ))}
           </datalist>
         </div>
+        <div className="suggestion-heading">
+          <strong>{suggestionLabel}</strong>
+        </div>
         <div className="chip-row">
-          {suggestions.map((exercise) => (
+          {visibleSuggestions.map((exercise) => (
             <button key={exercise.name} type="button" className="chip rich-chip" onClick={() => addExercise(exercise.name, exercise)}>
               <ExerciseMediaThumbnail exercise={exercise} size="sm" mediaLibrary={mediaLibrary} />
               <span>
@@ -2593,6 +2859,7 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
   const touchStartX = useRef(0);
   const ordered = [...workouts].sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
   const visibleWorkouts = ordered.slice(0, visibleCount);
+  const stats = getWorkoutStats(workouts);
 
   const handleTouchStart = (event, workoutId) => {
     touchStartX.current = event.changedTouches[0]?.clientX || 0;
@@ -2608,26 +2875,29 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header">
-        <div className="panel-copy">
-          <h2>History</h2>
-          <p>Saved workouts with sets and notes.</p>
+      <PageHeader title="History" subtitle="Your workout journal." />
+      {ordered.length ? (
+        <div className="summary-strip">
+          <StatCard label="This week" value={stats.thisWeek} />
+          <StatCard label="Last workout" value={stats.lastWorkout?.label || 'None'} />
         </div>
-      </header>
+      ) : null}
       {!ordered.length ? (
-        <div className="empty-panel">
-          <Dumbbell size={28} strokeWidth={2.2} />
-          <strong>No workouts saved yet.</strong>
-          <p>Finish your first workout and it will show up here with sets, notes, and copy actions.</p>
-        </div>
+        <EmptyState
+          icon={Dumbbell}
+          title="No workouts yet"
+          body="Finish your first workout and it will show up here."
+        />
       ) : null}
       {visibleWorkouts.map((workout) => {
         const isOpen = expanded === workout.id;
         const displayType = normalizeWorkoutType(workout.type);
         const completedExercises = workout.exercises.filter((exercise) => getCompletedSetCount(exercise) > 0);
         const totalSets = workout.exercises.reduce((total, exercise) => total + getCompletedSetCount(exercise), 0);
-        const duration = getWorkoutDurationSeconds(workout);
-        const exercisePreview = workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' - ');
+        const duration = getSafeWorkoutDurationSeconds(workout);
+        const exerciseNames = workout.exercises.map((exercise) => exercise.name || 'Untitled').filter(Boolean);
+        const exercisePreview = exerciseNames.slice(0, 3).join(', ');
+        const moreCount = Math.max(0, exerciseNames.length - 3);
         return (
           <div key={workout.id} className={`history-row ${swipedId === workout.id ? 'swiped' : ''}`}>
             <button
@@ -2654,34 +2924,23 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
                       <CategoryMediaBadge type={displayType} size="sm" />
                       <div>
                         <strong>{workout.label}</strong>
-                        <p>{formatShortDate(workout.date)}</p>
+                        <p className="history-time">
+                          {formatShortDate(workout.date).replace(/, \d{4}/, '')}
+                          {Number.isFinite(duration) ? ` | ${formatDurationReadable(duration)}` : ''}
+                        </p>
                       </div>
                     </div>
-                    <div className="history-chip-row" aria-label="Workout summary">
-                      <span>{displayType}</span>
-                      {formatTime(workout.startedAt) ? <span>{formatTime(workout.startedAt)}</span> : null}
-                      {Number.isFinite(duration) ? <span>{formatDuration(duration)}</span> : null}
-                      <span>{completedExercises.length} exercises</span>
-                      <span>{totalSets} sets</span>
-                      {workout.effortRating ? <span>Effort {workout.effortRating}/10</span> : null}
-                    </div>
-                    <p className="history-meta">{exercisePreview || 'No exercises logged'}</p>
+                    <p className="history-meta">
+                      {completedExercises.length} exercises | {totalSets} sets
+                      {workout.effortRating ? ` | Effort ${workout.effortRating}/10` : ''}
+                    </p>
+                    <p className="history-preview">
+                      {exercisePreview || 'No exercises logged'}
+                      {moreCount ? ` +${moreCount} more` : ''}
+                    </p>
                   </div>
                 </button>
                 <div className="history-actions">
-                  <button
-                    type="button"
-                    className="icon-button danger history-delete-inline"
-                    aria-label={`Delete ${workout.label || 'workout'}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (expanded === workout.id) setExpanded(null);
-                      setSwipedId(null);
-                      onDeleteWorkout(workout.id);
-                    }}
-                  >
-                    <Trash2 size={15} strokeWidth={2.3} />
-                  </button>
                   <span className={`history-chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
                     <ArrowDown size={18} strokeWidth={2.35} />
                   </span>
@@ -2712,7 +2971,7 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
                     </div>
                   ))}
                   {workout.notes ? <p className="history-notes">{workout.notes}</p> : null}
-                  <button type="button" className="text-link danger-link" onClick={() => onOpenWorkout(workout.id)}>
+                  <button type="button" className="text-link inline-link" onClick={() => onOpenWorkout(workout.id)}>
                     Copy into a new workout
                   </button>
                 </div>
@@ -2732,32 +2991,33 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
 
 function TemplatesScreen({ templates, onStartTemplate, onDeleteTemplate }) {
   const ordered = [...templates].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const savedWorkoutCount = ordered.reduce((total, template) => total + ((template.exercises || []).length ? 1 : 0), 0);
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header">
-        <div className="panel-copy">
-          <h2>Templates</h2>
-          <p>Start repeat workouts with the same exercise order.</p>
-        </div>
-      </header>
+      <PageHeader title="Templates" subtitle="Repeat workouts faster." />
+      <div className="summary-strip">
+        <StatCard label="Templates" value={ordered.length} />
+        <StatCard label="Saved workouts" value={savedWorkoutCount} />
+      </div>
       {!ordered.length ? (
-        <div className="empty-panel">
-          <ClipboardList size={28} strokeWidth={2.2} />
-          <strong>No templates saved yet.</strong>
-          <p>Open an active workout and save it as a template once the exercise list looks right.</p>
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="No templates yet"
+          body="Save any completed workout as a reusable template."
+        />
       ) : null}
       {ordered.map((template) => (
         <section key={template.id} className="template-card">
           <div className="template-copy">
-            <strong>{template.name}</strong>
-            <p>
-              {(template.exercises || []).length} exercises
-              {template.lastUsedAt ? ` - Last used ${formatShortDate(template.lastUsedAt.slice(0, 10))}` : ''}
-            </p>
+            <div className="template-title-row">
+              <CategoryMediaBadge type={template.type} size="sm" />
+              <strong>{template.name}</strong>
+            </div>
+            <p>{normalizeWorkoutType(template.type)} | {(template.exercises || []).length} exercises</p>
+            {template.lastUsedAt ? <p>Last used {formatRelativeDate(template.lastUsedAt.slice(0, 10))}</p> : null}
             <p className="history-meta">
-              {(template.exercises || []).map((exercise) => exercise.name || 'Untitled').slice(0, 4).join(' - ')}
+              {(template.exercises || []).map((exercise) => exercise.name || 'Untitled').slice(0, 4).join(', ')}
             </p>
           </div>
           <div className="template-actions">
@@ -2790,6 +3050,7 @@ function ChartsScreen({ workouts }) {
     [workouts, category, exerciseName, rangeId, metric],
   );
   const selectedMetric = availableMetrics.find((item) => item.id === metric) || availableMetrics[0] || CHART_METRIC_DEFINITIONS.sessions;
+  const stats = getWorkoutStats(workouts);
 
   useEffect(() => {
     if (availableMetrics.some((item) => item.id === metric)) return;
@@ -2798,24 +3059,47 @@ function ChartsScreen({ workouts }) {
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header">
-        <div className="panel-copy">
-          <h2>Charts</h2>
-          <p>See progress with metrics that match each workout style.</p>
-        </div>
-      </header>
+      <PageHeader title="Progress" subtitle="See how your training is improving." />
       {!workouts.length ? (
-        <div className="empty-panel">
-          <TrendingUp size={28} strokeWidth={2.2} />
-          <strong>No chart data yet.</strong>
-          <p>Save a workout first to unlock progress graphs.</p>
-        </div>
+        <EmptyState
+          icon={TrendingUp}
+          title="No progress yet"
+          body="Log a few workouts to see progress charts."
+        />
       ) : (
         <>
-          <section className="chart-controls">
+          <div className="progress-stats-grid">
+            <StatCard label="Total workouts" value={stats.totalWorkouts} />
+            <StatCard label="Current streak" value={`${stats.currentStreak}d`} />
+            <StatCard label="Time trained" value={formatDurationReadable(stats.totalTime) || '0m'} />
+            <StatCard label="Total sets" value={stats.totalSets} />
+          </div>
+          <section className="chart-card chart-card-primary">
+            <div className="chart-title-row">
+              <div>
+                <strong>{selectedMetric.label}</strong>
+                <p>{exerciseName || `${normalizeWorkoutType(category)} workouts`}</p>
+              </div>
+              <span>{points.length} points</span>
+            </div>
+            {points.length ? (
+              <MiniChart points={points} metricLabel={selectedMetric.label} metricId={selectedMetric.id} />
+            ) : (
+              <div className="empty-panel compact">
+                <Activity size={24} strokeWidth={2.2} />
+                <strong>No matching data.</strong>
+                <p>Try another metric, more time, or a different exercise.</p>
+              </div>
+            )}
+          </section>
+          <details className="chart-controls filter-details">
+            <summary>
+              <ListFilter size={16} strokeWidth={2.2} />
+              Filters
+            </summary>
             <div className="control-block">
-              <span><ListFilter size={15} strokeWidth={2.2} /> Category</span>
-              <div className="filter-row">
+              <span>Category</span>
+              <div className="filter-row filter-row-scroll">
                 {['All', ...CATEGORY_ORDER].map((item) => (
                     <button
                       key={item}
@@ -2834,7 +3118,7 @@ function ChartsScreen({ workouts }) {
             </div>
             <div className="control-grid">
               <label>
-                <span><Dumbbell size={15} strokeWidth={2.2} /> Exercise</span>
+                <span>Exercise</span>
                 <select value={exerciseName} onChange={(event) => setExerciseName(event.target.value)} className="select-input">
                   <option value="">All matching workouts</option>
                   {exerciseOptions.map((exercise) => (
@@ -2845,7 +3129,7 @@ function ChartsScreen({ workouts }) {
                 </select>
               </label>
               <label>
-                <span><Flame size={15} strokeWidth={2.2} /> Metric</span>
+                <span>Metric</span>
                 <select value={metric} onChange={(event) => setMetric(event.target.value)} className="select-input">
                   {availableMetrics.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -2856,8 +3140,8 @@ function ChartsScreen({ workouts }) {
               </label>
             </div>
             <div className="control-block">
-              <span><CalendarRange size={15} strokeWidth={2.2} /> Range</span>
-              <div className="filter-row">
+              <span>Range</span>
+              <div className="range-segmented">
                 {DATE_RANGES.map((item) => (
                   <button
                     key={item.id}
@@ -2870,25 +3154,7 @@ function ChartsScreen({ workouts }) {
                 ))}
               </div>
             </div>
-          </section>
-          <section className="chart-card">
-            <div className="chart-title-row">
-              <div>
-                <strong>{selectedMetric.label}</strong>
-                <p>{exerciseName || `${normalizeWorkoutType(category)} workouts`}</p>
-              </div>
-              <span>{points.length} points</span>
-            </div>
-            {points.length ? (
-              <MiniChart points={points} metricLabel={selectedMetric.label} metricId={selectedMetric.id} />
-            ) : (
-              <div className="empty-panel compact">
-                <Activity size={24} strokeWidth={2.2} />
-                <strong>No matching data.</strong>
-                <p>Try another metric, more time, or a different exercise.</p>
-              </div>
-            )}
-          </section>
+          </details>
         </>
       )}
     </div>
@@ -2924,7 +3190,7 @@ function MiniChart({ points, metricLabel, metricId }) {
         <path d={path} fill="none" stroke="url(#lineGradient)" strokeWidth="3" strokeLinecap="round" />
         {coords.map((point) => (
           <g key={`${point.date}-${point.value}`}>
-            <circle cx={point.x} cy={point.y} r="4.5" fill="#e5484d" />
+            <circle cx={point.x} cy={point.y} r="4.5" fill="#66d48f" />
             <text x={point.x} y={point.y - 10} textAnchor="middle" className="chart-point-label">
               {formatChartPoint(point.value)}
             </text>
@@ -2935,8 +3201,8 @@ function MiniChart({ points, metricLabel, metricId }) {
         ))}
         <defs>
           <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#ff6b6b" />
-            <stop offset="100%" stopColor="#e5484d" />
+            <stop offset="0%" stopColor="#8ec5ff" />
+            <stop offset="100%" stopColor="#66d48f" />
           </linearGradient>
         </defs>
       </svg>
@@ -2981,23 +3247,12 @@ function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, a
 
   return (
     <div className="screen stack-md">
-      <header className="panel-header">
-        <div className="panel-copy">
-          <h2>Backup</h2>
-          <p>Keep a copy of your workouts in case this browser data ever gets reset.</p>
-        </div>
-      </header>
-      <section className="backup-card">
-        <div className="backup-copy">
-          <p>Your workouts are saved in this browser on this device, so they should stay here as long as you keep using the same iPhone and browser and do not clear website data.</p>
-          <p>Export creates a backup JSON file you can keep in Files or iCloud. Import restores workouts, templates, favorites, and your active draft.</p>
-          <p>Machine photos are saved inside that backup as small compressed image data, so camera-added thumbnails can come back on import.</p>
-          <p>Clearing Safari website data, removing browser app data, or switching phones without restoring that browser data can remove your saved workouts. Normal app updates and page refreshes should not delete them.</p>
-        </div>
-        <section className="preference-card">
+      <PageHeader title="Settings" subtitle="Backup, restore, and workout preferences." />
+      <SettingsSection title="Workout preferences">
+        <div className="preference-row">
           <div>
-            <strong>Workout reminders</strong>
-            <p>Show the Apple Watch reminder before starting workouts.</p>
+            <strong>Apple Watch reminder</strong>
+            <p>Remind me to start a workout on Apple Watch.</p>
           </div>
           <label className="checkbox-row">
             <input
@@ -3005,28 +3260,33 @@ function BackupScreen({ workouts, templates, activeWorkout, favoriteExercises, a
               checked={appleWatchReminderEnabled}
               onChange={(event) => onAppleWatchReminderChange(event.target.checked)}
             />
-            <span>Remind me before workouts</span>
+            <span className="sr-only">Remind me to start a workout on Apple Watch</span>
           </label>
-        </section>
+        </div>
+      </SettingsSection>
+      <SettingsSection title="Backup & Restore">
+        <p className="settings-note">Export saves workouts, templates, favorites, photos, and drafts to a backup file.</p>
         <div className="backup-actions">
           <button type="button" className="primary-button" onClick={exportData}>
             <FileArchive size={18} strokeWidth={2.2} />
-            Export data
+            Export Data
           </button>
           <label className="file-button">
             <FileUp size={18} strokeWidth={2.2} />
-            Import data
+            Import Data
             <input type="file" accept="application/json" onChange={handleImport} />
           </label>
         </div>
-        <div className="warning-card">
-          <strong>Warning</strong>
-          <p>Reset deletes every saved workout on this device. Export a backup first if you may need your history later.</p>
-        </div>
+      </SettingsSection>
+      <SettingsSection title="Data safety">
+        <p className="settings-note">Your workouts are stored on this device. Export a backup before clearing browser data or switching phones.</p>
+      </SettingsSection>
+      <SettingsSection title="Danger zone">
+        <p className="settings-note">Reset deletes saved workouts, templates, favorites, photos, and drafts from this device.</p>
         <button type="button" className="text-link danger-link reset-link" onClick={onReset}>
           Reset all local data
         </button>
-      </section>
+      </SettingsSection>
     </div>
   );
 }
