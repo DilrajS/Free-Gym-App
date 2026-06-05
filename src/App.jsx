@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import MuscleBody from 'react-muscle-highlighter';
 import {
   Activity,
   ArrowDown,
@@ -83,45 +84,116 @@ const WGER_MEDIA_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 14;
 
 const EXERCISE_LIBRARY = [
   { name: 'Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Dumbbell Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Incline DB Press', muscle: 'Chest', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Incline Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Decline Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Chest Press Machine', muscle: 'Chest', type: 'Push', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Smith Machine Bench Press', muscle: 'Chest', type: 'Push', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Cable Fly', muscle: 'Chest', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Pec Deck Fly', muscle: 'Chest', type: 'Push', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Cable Crossover', muscle: 'Chest', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Dumbbell Pullover', muscle: 'Chest', type: 'Push', equipment: 'Dumbbell', tracking: 'weight/reps' },
   { name: 'Push Up', muscle: 'Chest', type: 'Push', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Incline Push Up', muscle: 'Chest', type: 'Push', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Chest Dip', muscle: 'Chest', type: 'Push', equipment: 'Bodyweight', tracking: 'bodyweight' },
   { name: 'Pull Up', muscle: 'Back', type: 'Pull', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Chin Up', muscle: 'Back', type: 'Pull', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Assisted Pull Up', muscle: 'Back', type: 'Pull', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Lat Pulldown', muscle: 'Back', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Close Grip Lat Pulldown', muscle: 'Back', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Straight Arm Pulldown', muscle: 'Back', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Barbell Row', muscle: 'Back', type: 'Pull', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'T-Bar Row', muscle: 'Back', type: 'Pull', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Chest Supported Row', muscle: 'Back', type: 'Pull', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Seated Cable Row', muscle: 'Back', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Single Arm DB Row', muscle: 'Back', type: 'Pull', equipment: 'Dumbbell', tracking: 'weight/reps' },
+  { name: 'Machine Row', muscle: 'Back', type: 'Pull', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Inverted Row', muscle: 'Back', type: 'Pull', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Deadlift', muscle: 'Back', type: 'Pull', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Trap Bar Deadlift', muscle: 'Back', type: 'Pull', equipment: 'Trap Bar', tracking: 'weight/reps' },
+  { name: 'Back Extension', muscle: 'Back', type: 'Pull', equipment: 'Machine', tracking: 'bodyweight' },
+  { name: 'Shrug', muscle: 'Back', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Face Pull', muscle: 'Shoulders', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Shoulder Press', muscle: 'Shoulders', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Overhead Press', muscle: 'Shoulders', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Arnold Press', muscle: 'Shoulders', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Machine Shoulder Press', muscle: 'Shoulders', type: 'Push', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Lateral Raise', muscle: 'Shoulders', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Cable Lateral Raise', muscle: 'Shoulders', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Front Raise', muscle: 'Shoulders', type: 'Push', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Rear Delt Fly', muscle: 'Shoulders', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Reverse Pec Deck', muscle: 'Shoulders', type: 'Pull', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Upright Row', muscle: 'Shoulders', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Bicep Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Barbell Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'EZ Bar Curl', muscle: 'Biceps', type: 'Pull', equipment: 'EZ Bar', tracking: 'weight/reps' },
   { name: 'Hammer Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Preacher Curl', muscle: 'Biceps', type: 'Pull', equipment: 'EZ Bar', tracking: 'weight/reps' },
+  { name: 'Incline Dumbbell Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Cable Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Concentration Curl', muscle: 'Biceps', type: 'Pull', equipment: 'Dumbbell', tracking: 'weight/reps' },
+  { name: 'Reverse Curl', muscle: 'Forearms', type: 'Pull', equipment: 'EZ Bar', tracking: 'weight/reps' },
   { name: 'Tricep Pushdown', muscle: 'Triceps', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Rope Pushdown', muscle: 'Triceps', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Overhead Tricep Extension', muscle: 'Triceps', type: 'Push', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Skull Crusher', muscle: 'Triceps', type: 'Push', equipment: 'EZ Bar', tracking: 'weight/reps' },
+  { name: 'Close Grip Bench Press', muscle: 'Triceps', type: 'Push', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Dips', muscle: 'Triceps', type: 'Push', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Tricep Dip Machine', muscle: 'Triceps', type: 'Push', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Wrist Curl', muscle: 'Forearms', type: 'Pull', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Farmer Carry', muscle: 'Forearms', type: 'Full Body', equipment: 'Dumbbells', tracking: 'distance/time' },
   { name: 'Back Squat', muscle: 'Quads', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Front Squat', muscle: 'Quads', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Goblet Squat', muscle: 'Quads', type: 'Legs', equipment: 'Dumbbell', tracking: 'weight/reps' },
+  { name: 'Hack Squat', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Smith Machine Squat', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Leg Press', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Leg Extension', muscle: 'Quads', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Walking Lunge', muscle: 'Quads', type: 'Legs', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Bulgarian Split Squat', muscle: 'Quads', type: 'Legs', equipment: 'Dumbbells', tracking: 'weight/reps' },
+  { name: 'Step Up', muscle: 'Quads', type: 'Legs', equipment: 'Dumbbells', tracking: 'weight/reps' },
   { name: 'Romanian Deadlift', muscle: 'Hamstrings', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Stiff Leg Deadlift', muscle: 'Hamstrings', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Leg Curl', muscle: 'Hamstrings', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Seated Leg Curl', muscle: 'Hamstrings', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Lying Leg Curl', muscle: 'Hamstrings', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Nordic Hamstring Curl', muscle: 'Hamstrings', type: 'Legs', equipment: 'Bodyweight', tracking: 'bodyweight' },
   { name: 'Hip Thrust', muscle: 'Glutes', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Glute Bridge', muscle: 'Glutes', type: 'Legs', equipment: 'Barbell', tracking: 'weight/reps' },
   { name: 'Cable Kickback', muscle: 'Glutes', type: 'Legs', equipment: 'Cable', tracking: 'weight/reps' },
+  { name: 'Hip Abduction Machine', muscle: 'Glutes', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Hip Adduction Machine', muscle: 'Glutes', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Standing Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Seated Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Leg Press Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Donkey Calf Raise', muscle: 'Calves', type: 'Legs', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Plank', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'time' },
+  { name: 'Side Plank', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'time' },
   { name: 'Cable Crunch', muscle: 'Core', type: 'Core', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Hanging Knee Raise', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Hanging Leg Raise', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Ab Wheel Rollout', muscle: 'Core', type: 'Core', equipment: 'Ab Wheel', tracking: 'bodyweight' },
+  { name: 'Decline Sit Up', muscle: 'Core', type: 'Core', equipment: 'Bench', tracking: 'bodyweight' },
+  { name: 'Russian Twist', muscle: 'Core', type: 'Core', equipment: 'Medicine Ball', tracking: 'weight/reps' },
+  { name: 'Machine Crunch', muscle: 'Core', type: 'Core', equipment: 'Machine', tracking: 'weight/reps' },
+  { name: 'Reverse Crunch', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Bicycle Crunch', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
+  { name: 'Wood Chop', muscle: 'Core', type: 'Core', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Pallof Press', muscle: 'Core', type: 'Core', equipment: 'Cable', tracking: 'weight/reps' },
   { name: 'Treadmill Run', muscle: 'Cardio', type: 'Cardio', equipment: 'Treadmill', tracking: 'distance/time' },
   { name: 'Incline Walk', muscle: 'Cardio', type: 'Cardio', equipment: 'Treadmill', tracking: 'distance/time' },
   { name: 'Stationary Bike', muscle: 'Cardio', type: 'Cardio', equipment: 'Bike', tracking: 'distance/time' },
+  { name: 'Elliptical', muscle: 'Cardio', type: 'Cardio', equipment: 'Elliptical', tracking: 'distance/time' },
   { name: 'Rowing Machine', muscle: 'Cardio', type: 'Cardio', equipment: 'Rower', tracking: 'distance/time' },
   { name: 'Stair Climber', muscle: 'Cardio', type: 'Cardio', equipment: 'Machine', tracking: 'time' },
+  { name: 'SkiErg', muscle: 'Cardio', type: 'Cardio', equipment: 'SkiErg', tracking: 'distance/time' },
+  { name: 'Battle Ropes', muscle: 'Cardio', type: 'Cardio', equipment: 'Ropes', tracking: 'time' },
+  { name: 'Sled Push', muscle: 'Full Body', type: 'Full Body', equipment: 'Sled', tracking: 'distance/time' },
+  { name: 'Kettlebell Swing', muscle: 'Full Body', type: 'Full Body', equipment: 'Kettlebell', tracking: 'weight/reps' },
+  { name: 'Clean and Press', muscle: 'Full Body', type: 'Full Body', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Power Clean', muscle: 'Full Body', type: 'Full Body', equipment: 'Barbell', tracking: 'weight/reps' },
+  { name: 'Medicine Ball Slam', muscle: 'Full Body', type: 'Full Body', equipment: 'Medicine Ball', tracking: 'weight/reps' },
 ];
 
 const CATEGORY_ICONS = {
@@ -1149,48 +1221,86 @@ function calculateWorkoutConsistency(workouts, minimumDays = 365) {
     };
   });
 
-  let currentStreak = 0;
-  for (let cursor = new Date(today); workoutDates.has(getDateKey(cursor)); cursor = addDays(cursor, -1)) {
-    currentStreak += 1;
-  }
-
-  let longestStreak = 0;
-  let runningStreak = 0;
-  [...workoutDates]
-    .sort()
-    .forEach((dateKey, index, dates) => {
-      const previous = dates[index - 1];
-      runningStreak = previous && getDayDifference(previous, dateKey) === 1 ? runningStreak + 1 : 1;
-      longestStreak = Math.max(longestStreak, runningStreak);
-    });
-
-  const currentMonth = todayValue().slice(0, 7);
-  const workoutsThisMonth = workouts.filter((workout) => String(workout.date || '').startsWith(currentMonth)).length;
-  const ninetyDayStart = addDays(today, -89);
-  const last90WorkoutDays = [...workoutDates].filter((dateKey) => getLocalDateFromKey(dateKey) >= ninetyDayStart && getLocalDateFromKey(dateKey) <= today).length;
-  const consistency90 = Math.round((last90WorkoutDays / 90) * 100);
   const weekCount = Math.max(...calendarDays.map((day) => day.weekIndex), 1);
 
-  return { calendarDays, currentStreak, longestStreak, workoutsThisMonth, consistency90, weekCount };
+  return { calendarDays, weekCount };
 }
 
 const RECOVERY_MUSCLES = [
-  'Chest',
-  'Back',
+  'Chest / pecs',
   'Front delts',
   'Side delts',
-  'Rear delts',
   'Biceps',
-  'Triceps',
   'Forearms',
-  'Core',
-  'Glutes',
+  'Abs / core',
   'Quads',
-  'Hamstrings',
   'Calves',
+  'Traps',
+  'Rear delts',
+  'Lats / upper back',
+  'Triceps',
+  'Glutes',
+  'Hamstrings',
 ];
 
 const RECOVERY_DAYS_TO_READY = 3;
+const RECOVERY_STATE_COLORS = {
+  ready: '#5fe08d',
+  recovering: '#ffb14a',
+  fatigued: '#ff5257',
+  inactive: '#37414d',
+};
+const RECOVERY_STATE_PRIORITY = {
+  fatigued: 3,
+  recovering: 2,
+  ready: 1,
+  inactive: 0,
+};
+const BODY_HIGHLIGHTER_SLUGS = [
+  'abs',
+  'adductors',
+  'ankles',
+  'biceps',
+  'calves',
+  'chest',
+  'deltoids',
+  'feet',
+  'forearm',
+  'gluteal',
+  'hamstring',
+  'hands',
+  'hair',
+  'head',
+  'knees',
+  'lower-back',
+  'neck',
+  'obliques',
+  'quadriceps',
+  'tibialis',
+  'trapezius',
+  'triceps',
+  'upper-back',
+];
+const FRONT_BODY_SLUG_MUSCLES = {
+  chest: ['Chest / pecs'],
+  deltoids: ['Front delts', 'Side delts'],
+  biceps: ['Biceps'],
+  forearm: ['Forearms'],
+  abs: ['Abs / core'],
+  obliques: ['Abs / core'],
+  quadriceps: ['Quads'],
+  calves: ['Calves'],
+};
+const BACK_BODY_SLUG_MUSCLES = {
+  trapezius: ['Traps'],
+  deltoids: ['Rear delts'],
+  'upper-back': ['Lats / upper back'],
+  triceps: ['Triceps'],
+  forearm: ['Forearms'],
+  gluteal: ['Glutes'],
+  hamstring: ['Hamstrings'],
+  calves: ['Calves'],
+};
 
 function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
@@ -1201,20 +1311,22 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   const muscle = exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '';
   const groups = [];
 
-  if (/bench|incline|chest|fly|push up/.test(name) || muscle === 'Chest') groups.push('Chest');
-  if (/pull up|pulldown|row|deadlift/.test(name) || muscle === 'Back') groups.push('Back');
-  if (/shoulder press|overhead press/.test(name)) groups.push('Front delts', 'Triceps');
-  if (/lateral raise/.test(name)) groups.push('Side delts');
-  if (/rear delt|face pull/.test(name)) groups.push('Rear delts');
-  if (/curl|pull up|pulldown|row/.test(name) || muscle === 'Biceps') groups.push('Biceps');
-  if (/tricep|dip|bench|press|push up/.test(name) || muscle === 'Triceps') groups.push('Triceps');
-  if (/hammer curl|farmer|carry|grip|forearm/.test(name)) groups.push('Forearms');
-  if (/plank|crunch|knee raise|dead bug|pallof|core|ab/.test(name) || muscle === 'Core') groups.push('Core');
-  if (/hip thrust|kickback|deadlift|squat|leg press/.test(name) || muscle === 'Glutes') groups.push('Glutes');
-  if (/squat|leg press|leg extension|lunge|quad/.test(name) || muscle === 'Quads') groups.push('Quads');
-  if (/romanian|deadlift|leg curl|hamstring/.test(name) || muscle === 'Hamstrings') groups.push('Hamstrings');
+  if (/bench|incline|decline|chest|fly|pec|crossover|push up|pullover|dip/.test(name) || muscle === 'Chest') groups.push('Chest / pecs');
+  if (/shrug|upright row|face pull|deadlift|clean|farmer|carry/.test(name)) groups.push('Traps');
+  if (/pull up|chin up|pulldown|row|deadlift|back extension|pullover|clean|sled|kettlebell/.test(name) || muscle === 'Back') groups.push('Lats / upper back');
+  if (/shoulder press|overhead press|arnold|front raise|bench|incline|push up|clean and press/.test(name)) groups.push('Front delts');
+  if (/lateral raise|upright row|shoulder press|arnold|machine shoulder/.test(name)) groups.push('Side delts');
+  if (/rear delt|face pull|reverse pec|row/.test(name)) groups.push('Rear delts');
+  if (/curl|chin up|pull up|pulldown|row/.test(name) || muscle === 'Biceps') groups.push('Biceps');
+  if (/tricep|skull|dip|bench|press|push up|extension/.test(name) || muscle === 'Triceps') groups.push('Triceps');
+  if (/hammer curl|reverse curl|wrist|farmer|carry|grip|forearm|deadlift|shrug/.test(name) || muscle === 'Forearms') groups.push('Forearms');
+  if (/plank|crunch|knee raise|leg raise|dead bug|pallof|core|ab|sit up|twist|wood chop|rollout|slam/.test(name) || muscle === 'Core') groups.push('Abs / core');
+  if (/hip thrust|glute|kickback|deadlift|squat|leg press|lunge|split squat|step up|abduction|swing|sled/.test(name) || muscle === 'Glutes') groups.push('Glutes');
+  if (/squat|leg press|leg extension|lunge|split squat|step up|quad|sled/.test(name) || muscle === 'Quads') groups.push('Quads');
+  if (/romanian|stiff leg|deadlift|leg curl|hamstring|nordic|swing/.test(name) || muscle === 'Hamstrings') groups.push('Hamstrings');
   if (/calf/.test(name) || muscle === 'Calves') groups.push('Calves');
   if (muscle === 'Shoulders' && !groups.some((group) => group.includes('delts'))) groups.push('Front delts');
+  if (muscle === 'Full Body') groups.push('Traps', 'Lats / upper back', 'Abs / core', 'Glutes', 'Quads', 'Hamstrings');
 
   return uniqueValues(groups).filter((group) => RECOVERY_MUSCLES.includes(group));
 }
@@ -1236,6 +1348,60 @@ function getEstimatedReadyDate(lastTrainedDate) {
   return getDateKey(addDays(getLocalDateFromKey(lastTrainedDate), RECOVERY_DAYS_TO_READY));
 }
 
+function getRecoveryStateLabel(state) {
+  if (state === 'ready') return 'Good to go';
+  if (state === 'recovering') return 'Recovering';
+  if (state === 'fatigued') return 'Not recovered';
+  return 'No data';
+}
+
+function getRecoveryStateHint(state) {
+  if (state === 'ready') return 'Optimal to train';
+  if (state === 'recovering') return 'Light work ok';
+  if (state === 'fatigued') return 'Needs recovery';
+  return 'Log history';
+}
+
+function getDominantRecoveryItem(items = []) {
+  return [...items].sort((a, b) => (RECOVERY_STATE_PRIORITY[b?.state] || 0) - (RECOVERY_STATE_PRIORITY[a?.state] || 0))[0] || null;
+}
+
+function getBodySlugMuscleMap(side) {
+  return side === 'back' ? BACK_BODY_SLUG_MUSCLES : FRONT_BODY_SLUG_MUSCLES;
+}
+
+function getBodyHiddenParts(side) {
+  const visibleSlugs = new Set(Object.keys(getBodySlugMuscleMap(side)));
+  return BODY_HIGHLIGHTER_SLUGS.filter((slug) => !visibleSlugs.has(slug));
+}
+
+function getRecoveryBodyData(recovery, side, selectedMuscle) {
+  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
+  const slugMuscles = getBodySlugMuscleMap(side);
+
+  return Object.entries(slugMuscles).map(([slug, muscles]) => {
+    const items = muscles.map((muscle) => recoveryByMuscle.get(muscle)).filter(Boolean);
+    const dominant = getDominantRecoveryItem(items);
+    const state = dominant?.state || 'inactive';
+    const isSelected = muscles.includes(selectedMuscle);
+    return {
+      slug,
+      color: RECOVERY_STATE_COLORS[state],
+      styles: {
+        fill: RECOVERY_STATE_COLORS[state],
+        stroke: isSelected ? 'rgba(255,255,255,0.9)' : 'rgba(4,8,13,0.58)',
+        strokeWidth: isSelected ? 3 : 1.4,
+      },
+    };
+  });
+}
+
+function getMuscleFromBodySlug(slug, side, recovery) {
+  const muscles = getBodySlugMuscleMap(side)[slug] || [];
+  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
+  return getDominantRecoveryItem(muscles.map((muscle) => recoveryByMuscle.get(muscle)).filter(Boolean))?.muscle || muscles[0] || '';
+}
+
 function calculateMuscleRecovery(workouts) {
   const recoveryByMuscle = new Map(
     RECOVERY_MUSCLES.map((muscle) => [
@@ -1244,6 +1410,8 @@ function calculateMuscleRecovery(workouts) {
         muscle,
         lastTrainedDate: '',
         exercises: [],
+        allExercises: [],
+        workoutIds: [],
       },
     ]),
   );
@@ -1256,11 +1424,14 @@ function calculateMuscleRecovery(workouts) {
         if (!hasCompletedSet) return;
         getExerciseRecoveryMuscles(exercise).forEach((muscle) => {
           const current = recoveryByMuscle.get(muscle);
-          if (!current || (current.lastTrainedDate && current.lastTrainedDate !== workout.date)) return;
+          if (!current) return;
+          const isLatestDate = !current.lastTrainedDate || current.lastTrainedDate === workout.date;
           recoveryByMuscle.set(muscle, {
             ...current,
-            lastTrainedDate: workout.date,
-            exercises: uniqueValues([...(current.exercises || []), exercise.name || muscle]),
+            lastTrainedDate: current.lastTrainedDate || workout.date,
+            exercises: isLatestDate ? uniqueValues([...(current.exercises || []), exercise.name || muscle]) : current.exercises,
+            allExercises: uniqueValues([...(current.allExercises || []), exercise.name || muscle]),
+            workoutIds: uniqueValues([...(current.workoutIds || []), workout.id || workout.startedAt || workout.date]),
           });
         });
       });
@@ -1279,6 +1450,8 @@ function calculateMuscleRecovery(workouts) {
       recoveryPercent,
       readyDate: getEstimatedReadyDate(lastTrainedDate),
       exercises: recovery?.exercises || [],
+      allExercises: recovery?.allExercises || recovery?.exercises || [],
+      workoutCount: recovery?.workoutIds?.length || 0,
     };
   });
 }
@@ -1371,24 +1544,13 @@ function CategoryMediaBadge({ type, size = 'md' }) {
   );
 }
 
-function formatWorkoutDayTitle(day) {
-  const parts = [formatShortDate(day.date)];
-  if (!day.summary) return `${parts[0]}: no workout`;
-  parts.push(day.summary.workoutNames.join(', '));
-  if (day.summary.durations.length) parts.push(`Duration: ${formatDuration(day.summary.durations.reduce((total, duration) => total + duration, 0))}`);
-  parts.push(`${day.summary.exerciseCount} exercise${day.summary.exerciseCount === 1 ? '' : 's'}`);
-  parts.push(`${day.summary.totalSets} set${day.summary.totalSets === 1 ? '' : 's'}`);
-  return parts.join(' | ');
-}
-
 function WorkoutConsistencyCalendar({ workouts }) {
   const scrollRef = useRef(null);
   const [selectedDay, setSelectedDay] = useState(null);
-  const { calendarDays, currentStreak, workoutsThisMonth, longestStreak, consistency90, weekCount } = useMemo(
+  const { calendarDays, weekCount } = useMemo(
     () => calculateWorkoutConsistency(workouts),
     [workouts],
   );
-  const selectedSummary = selectedDay?.summary || null;
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -1404,7 +1566,6 @@ function WorkoutConsistencyCalendar({ workouts }) {
       <div className="dashboard-card-head">
         <div>
           <strong>Consistency</strong>
-          <p>{currentStreak ? `${currentStreak} day current streak` : 'No active streak yet'}</p>
         </div>
         <CalendarRange size={18} strokeWidth={2.2} />
       </div>
@@ -1416,8 +1577,8 @@ function WorkoutConsistencyCalendar({ workouts }) {
               type="button"
               className={`consistency-day ${day.workedOut ? 'worked-out' : ''} ${day.isToday ? 'today' : ''} ${selectedDay?.date === day.date ? 'selected' : ''}`}
               style={{ gridColumn: day.weekIndex, gridRow: day.dayOfWeek + 1 }}
-              title={formatWorkoutDayTitle(day)}
-              aria-label={formatWorkoutDayTitle(day)}
+              title={formatShortDate(day.date)}
+              aria-label={formatShortDate(day.date)}
               onClick={() => setSelectedDay(day)}
             />
           ))}
@@ -1426,125 +1587,64 @@ function WorkoutConsistencyCalendar({ workouts }) {
       {selectedDay ? (
         <div className="consistency-detail">
           <strong>{formatShortDate(selectedDay.date)}</strong>
-          <span>{selectedSummary ? selectedSummary.workoutNames.join(', ') : 'No workout logged'}</span>
-          {selectedSummary?.durations.length ? <span>{formatDuration(selectedSummary.durations.reduce((total, duration) => total + duration, 0))}</span> : null}
-          {selectedSummary ? <span>{selectedSummary.exerciseCount} exercise{selectedSummary.exerciseCount === 1 ? '' : 's'} / {selectedSummary.totalSets} set{selectedSummary.totalSets === 1 ? '' : 's'}</span> : null}
         </div>
       ) : null}
-      <div className="dashboard-stat-row">
-        <span><strong>{currentStreak}</strong> current streak</span>
-        <span><strong>{longestStreak}</strong> longest streak</span>
-        <span><strong>{workoutsThisMonth}</strong> this month</span>
-        <span><strong>{consistency90}%</strong> last 90 days</span>
-      </div>
     </section>
   );
 }
 
-function RecoveryLegend() {
-  return (
-    <div className="recovery-legend" aria-hidden="true">
-      <span><i className="fatigued" /> Fatigued</span>
-      <span><i className="recovering" /> Recovering</span>
-      <span><i className="ready" /> Ready</span>
-      <span><i className="inactive" /> No data</span>
-    </div>
-  );
-}
-
-function AnatomyRegion({ item, selected, paths, onSelect }) {
-  const label = item.lastTrainedDate
-    ? `${item.muscle}: ${item.recoveryPercent}% recovered, last trained ${formatShortDate(item.lastTrainedDate)}`
-    : `${item.muscle}: no recent data`;
+function RecoveryInlineLegend() {
+  const legendItems = [
+    { state: 'ready', label: 'Good to go' },
+    { state: 'recovering', label: 'Recovering' },
+    { state: 'fatigued', label: 'Not recovered' },
+  ];
 
   return (
-    <g
-      className={`anatomy-hit-area ${selected ? 'selected' : ''}`}
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      onClick={() => onSelect(item)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect(item);
-        }
-      }}
-    >
-      <title>{label}</title>
-      {paths.map((path, index) => (
-        <path key={`${item.muscle}-${index}`} className={`anatomy-region ${item.state}`} d={path} />
+    <div className="recovery-map-legend" aria-label="Recovery color legend">
+      {legendItems.map((item) => (
+        <span key={item.state} className="recovery-map-legend-item">
+          <i className={item.state} />
+          <span>
+            <strong>{item.label}</strong>
+          </span>
+        </span>
       ))}
-    </g>
+    </div>
   );
 }
 
 function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
-  const recoveryByMuscle = new Map(recovery.map((item) => [item.muscle, item]));
-  const regions = [
-    { muscle: 'Chest', paths: ['M56 53 C46 54 39 61 38 75 C47 81 59 80 67 72 C66 61 63 55 56 53 Z', 'M83 53 C76 55 73 61 72 72 C80 80 92 81 101 75 C100 61 93 54 83 53 Z'] },
-    { muscle: 'Front delts', paths: ['M35 52 C25 57 22 68 25 80 C34 79 39 72 41 60 Z', 'M105 52 C115 57 118 68 115 80 C106 79 101 72 99 60 Z'] },
-    { muscle: 'Side delts', paths: ['M24 78 C17 88 14 104 17 118 C25 117 30 105 31 90 Z', 'M116 78 C123 88 126 104 123 118 C115 117 110 105 109 90 Z', 'M174 75 C166 84 163 99 166 114 C174 113 179 101 180 87 Z', 'M266 75 C274 84 277 99 274 114 C266 113 261 101 260 87 Z'] },
-    { muscle: 'Biceps', paths: ['M27 82 C20 95 19 112 24 125 C32 122 36 104 34 89 Z', 'M113 82 C120 95 121 112 116 125 C108 122 104 104 106 89 Z'] },
-    { muscle: 'Triceps', paths: ['M168 82 C163 97 164 112 171 126 C178 120 181 103 178 88 Z', 'M272 82 C277 97 276 112 269 126 C262 120 259 103 262 88 Z'] },
-    { muscle: 'Forearms', paths: ['M23 124 C18 139 17 156 23 169 C31 158 34 142 31 126 Z', 'M117 124 C122 139 123 156 117 169 C109 158 106 142 109 126 Z', 'M170 126 C164 141 164 157 171 170 C178 158 180 142 177 127 Z', 'M270 126 C276 141 276 157 269 170 C262 158 260 142 263 127 Z'] },
-    { muscle: 'Core', paths: ['M55 79 C50 91 50 115 57 132 L83 132 C90 115 90 91 85 79 C78 83 62 83 55 79 Z'] },
-    { muscle: 'Quads', paths: ['M52 135 C44 153 43 184 51 207 C62 190 66 159 64 135 Z', 'M86 135 C84 159 88 190 99 207 C107 184 106 153 98 135 Z'] },
-    { muscle: 'Calves', paths: ['M48 209 C42 227 43 250 51 266 C60 250 61 227 56 209 Z', 'M94 209 C89 227 90 250 99 266 C107 250 108 227 102 209 Z', 'M200 208 C193 227 194 250 202 266 C211 249 213 227 208 208 Z', 'M232 208 C227 227 229 249 238 266 C246 250 247 227 240 208 Z'] },
-    { muscle: 'Back', paths: ['M203 51 C190 59 184 80 187 106 C198 116 212 119 220 119 C228 119 242 116 253 106 C256 80 250 59 237 51 C229 57 211 57 203 51 Z'] },
-    { muscle: 'Rear delts', paths: ['M184 53 C174 58 170 69 173 81 C183 80 189 72 191 60 Z', 'M256 53 C266 58 270 69 267 81 C257 80 251 72 249 60 Z'] },
-    { muscle: 'Glutes', paths: ['M191 130 C189 146 198 160 216 162 C219 150 218 139 211 130 Z', 'M229 130 C222 139 221 150 224 162 C242 160 251 146 249 130 Z'] },
-    { muscle: 'Hamstrings', paths: ['M197 164 C190 183 192 204 202 219 C213 200 216 181 213 164 Z', 'M227 164 C224 181 227 200 238 219 C248 204 250 183 243 164 Z'] },
-  ];
-
-  return (
-    <div className="anatomy-stage">
-      <svg className="anatomy-svg" viewBox="0 0 290 286" role="img" aria-label="Front and back muscle recovery anatomy">
-        <text x="70" y="16" textAnchor="middle" className="anatomy-view-label">Front</text>
-        <text x="220" y="16" textAnchor="middle" className="anatomy-view-label">Back</text>
-        <g className="anatomy-base" aria-hidden="true">
-          <path d="M70 22 C57 22 48 32 48 45 C48 51 52 56 56 59 L50 79 L42 139 L47 208 L43 269 L59 269 L68 211 L70 152 L72 211 L81 269 L97 269 L93 208 L100 139 L90 79 L84 59 C88 56 92 51 92 45 C92 32 83 22 70 22 Z" />
-          <path d="M220 22 C207 22 198 32 198 45 C198 51 202 56 206 59 L190 78 L184 139 L193 208 L196 269 L212 269 L220 211 L228 269 L244 269 L247 208 L256 139 L250 78 L234 59 C238 56 242 51 242 45 C242 32 233 22 220 22 Z" />
-        </g>
-        {regions.map((region) => {
-          const item = recoveryByMuscle.get(region.muscle);
-          return item ? (
-            <AnatomyRegion
-              key={region.muscle}
-              item={item}
-              selected={selectedMuscle === item.muscle}
-              paths={region.paths}
-              onSelect={onSelect}
-            />
-          ) : null;
-        })}
-      </svg>
+  const renderBody = (side) => (
+    <div className="muscle-body-panel">
+      <span className="anatomy-view-label">{side}</span>
+      <div className="muscle-body-frame">
+        <MuscleBody
+          data={getRecoveryBodyData(recovery, side, selectedMuscle)}
+          side={side}
+          gender="male"
+          scale={1}
+          border="rgba(209, 218, 231, 0.18)"
+          defaultFill="rgba(51, 61, 73, 0.74)"
+          defaultStroke="rgba(8, 12, 18, 0.7)"
+          defaultStrokeWidth={1.2}
+          hiddenParts={getBodyHiddenParts(side)}
+          onBodyPartPress={(part) => {
+            const muscle = getMuscleFromBodySlug(part.slug, side, recovery);
+            if (muscle) onSelect(muscle);
+          }}
+        />
+      </div>
     </div>
   );
-}
 
-function RecoveryDetailPanel({ item }) {
-  if (!item) return null;
   return (
-    <div className={`recovery-detail-panel ${item.state}`}>
-      <div>
-        <span className="tiny-label">{item.state === 'inactive' ? 'No recent data' : `${item.recoveryPercent}% recovered`}</span>
-        <h3>{item.muscle}</h3>
+    <div className="anatomy-stage muscle-highlighter-stage">
+      <div className="muscle-body-grid" aria-label="Front and back muscle recovery anatomy">
+        {renderBody('front')}
+        {renderBody('back')}
       </div>
-      <div className="recovery-detail-grid">
-        <span>
-          <small>Last trained</small>
-          <strong>{item.lastTrainedDate ? formatShortDate(item.lastTrainedDate) : 'Not yet'}</strong>
-        </span>
-        <span>
-          <small>Ready date</small>
-          <strong>{item.readyDate ? formatShortDate(item.readyDate) : 'Unknown'}</strong>
-        </span>
-      </div>
-      <div className="recovery-exercise-list">
-        <small>Exercises</small>
-        <p>{item.exercises.length ? item.exercises.join(', ') : 'No logged exercises yet.'}</p>
-      </div>
+      <RecoveryInlineLegend />
     </div>
   );
 }
@@ -1553,18 +1653,20 @@ function MuscleRecoveryCard({ workouts }) {
   const [showInfo, setShowInfo] = useState(false);
   const [selectedMuscle, setSelectedMuscle] = useState(null);
   const recovery = useMemo(() => calculateMuscleRecovery(workouts), [workouts]);
-  const selectedRecovery = recovery.find((item) => item.muscle === selectedMuscle) || recovery.find((item) => item.state !== 'inactive') || recovery[0];
-  const suggestedMuscles = recovery
-    .filter((item) => item.state === 'ready')
-    .slice(0, 3)
-    .map((item) => item.muscle);
+  const readyMuscles = recovery.filter((item) => item.state === 'ready');
+  const readyText = readyMuscles.length ? readyMuscles.slice(0, 3).map((item) => item.muscle).join(' \u2022 ') : 'Log workouts to build recovery history';
 
   return (
     <section className="dashboard-card recovery-card">
-      <div className="dashboard-card-head">
-        <div>
-          <strong>Muscle recovery</strong>
-          <p>{suggestedMuscles.length ? `Ready: ${suggestedMuscles.join(', ')}` : 'Log workouts to build recovery history'}</p>
+      <div className="recovery-mockup-head">
+        <div className="recovery-title-block">
+          <span className="premium-eyebrow">Recovery status</span>
+          <h2>Muscle Recovery</h2>
+          <p>
+            <CheckCircle2 size={18} strokeWidth={2.6} />
+            <strong>Ready to train:</strong>
+            <span>{readyText}</span>
+          </p>
         </div>
         <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
           <Info size={16} strokeWidth={2.4} />
@@ -1572,11 +1674,9 @@ function MuscleRecoveryCard({ workouts }) {
       </div>
       <MuscleAnatomyGraphic
         recovery={recovery}
-        selectedMuscle={selectedRecovery?.muscle}
-        onSelect={(item) => setSelectedMuscle(item.muscle)}
+        selectedMuscle={selectedMuscle}
+        onSelect={(muscle) => setSelectedMuscle(muscle)}
       />
-      <RecoveryLegend />
-      <RecoveryDetailPanel item={selectedRecovery} />
       {showInfo ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setShowInfo(false)}>
           <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-info-title" onClick={(event) => event.stopPropagation()}>
@@ -1586,7 +1686,7 @@ function MuscleRecoveryCard({ workouts }) {
                 <X size={18} strokeWidth={2.4} />
               </button>
             </div>
-            <p>Red means just trained, orange means still recovering, green means ready, and gray means there is no recent logged data for that region.</p>
+            <p>Green means good to go, yellow means recovering, red means not recovered, and gray means no recent data yet.</p>
           </div>
         </div>
       ) : null}
@@ -3244,4 +3344,3 @@ export default function App() {
     </div>
   );
 }
-
