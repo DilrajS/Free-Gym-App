@@ -45,6 +45,7 @@ const WORKOUT_TEMPLATES_KEY = `${STORAGE_KEY}-templates`;
 const FAVORITE_EXERCISES_KEY = `${STORAGE_KEY}-favorite-exercises`;
 const WGER_MEDIA_CACHE_KEY = `${STORAGE_KEY}-wger-media`;
 const APPLE_WATCH_REMINDER_KEY = `${STORAGE_KEY}-apple-watch-reminder`;
+const RECOVERY_DAYS_KEY = `${STORAGE_KEY}-recovery-days`;
 const TABS = ['Workout', 'Templates', 'History', 'Charts', 'Backup'];
 const CATEGORY_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio', 'Custom'];
 const TEMPLATE_ORDER = ['Push', 'Pull', 'Upper', 'Legs', 'Full Body', 'Core', 'Cardio'];
@@ -736,6 +737,15 @@ function saveAppleWatchReminderEnabled(enabled) {
   localStorage.setItem(APPLE_WATCH_REMINDER_KEY, enabled ? 'on' : 'off');
 }
 
+function readRecoveryDays() {
+  const saved = Number(localStorage.getItem(RECOVERY_DAYS_KEY));
+  return saved === 2 ? 2 : DEFAULT_RECOVERY_DAYS;
+}
+
+function saveRecoveryDays(days) {
+  localStorage.setItem(RECOVERY_DAYS_KEY, Number(days) === 2 ? '2' : '1');
+}
+
 function readCachedWgerMedia() {
   try {
     const parsed = JSON.parse(localStorage.getItem(WGER_MEDIA_CACHE_KEY) || 'null');
@@ -1243,7 +1253,7 @@ const RECOVERY_MUSCLES = [
   'Hamstrings',
 ];
 
-const RECOVERY_DAYS_TO_READY = 3;
+const DEFAULT_RECOVERY_DAYS = 1;
 const RECOVERY_STATE_COLORS = {
   ready: '#5fe08d',
   recovering: '#ffb14a',
@@ -1331,34 +1341,40 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   return uniqueValues(groups).filter((group) => RECOVERY_MUSCLES.includes(group));
 }
 
-function getRecoveryState(daysAgo) {
+function getRecoveryDaysToReady(recoveryDays) {
+  return (Number(recoveryDays) === 2 ? 2 : 1) + 1;
+}
+
+function getRecoveryState(daysAgo, recoveryDays = DEFAULT_RECOVERY_DAYS) {
+  const daysToReady = getRecoveryDaysToReady(recoveryDays);
   if (daysAgo === null || daysAgo === undefined) return 'inactive';
   if (daysAgo <= 0) return 'fatigued';
-  if (daysAgo < RECOVERY_DAYS_TO_READY) return 'recovering';
+  if (daysAgo < daysToReady) return 'recovering';
   return 'ready';
 }
 
-function getRecoveryPercent(daysAgo) {
+function getRecoveryPercent(daysAgo, recoveryDays = DEFAULT_RECOVERY_DAYS) {
+  const daysToReady = getRecoveryDaysToReady(recoveryDays);
   if (daysAgo === null || daysAgo === undefined) return null;
-  return Math.min(100, Math.max(18, Math.round((daysAgo / RECOVERY_DAYS_TO_READY) * 100)));
+  return Math.min(100, Math.max(18, Math.round((daysAgo / daysToReady) * 100)));
 }
 
-function getEstimatedReadyDate(lastTrainedDate) {
+function getEstimatedReadyDate(lastTrainedDate, recoveryDays = DEFAULT_RECOVERY_DAYS) {
   if (!lastTrainedDate) return '';
-  return getDateKey(addDays(getLocalDateFromKey(lastTrainedDate), RECOVERY_DAYS_TO_READY));
+  return getDateKey(addDays(getLocalDateFromKey(lastTrainedDate), getRecoveryDaysToReady(recoveryDays)));
 }
 
 function getRecoveryStateLabel(state) {
-  if (state === 'ready') return 'Good to go';
+  if (state === 'ready') return 'Ready';
   if (state === 'recovering') return 'Recovering';
-  if (state === 'fatigued') return 'Not recovered';
+  if (state === 'fatigued') return 'Trained today';
   return 'No data';
 }
 
 function getRecoveryStateHint(state) {
-  if (state === 'ready') return 'Optimal to train';
-  if (state === 'recovering') return 'Light work ok';
-  if (state === 'fatigued') return 'Needs recovery';
+  if (state === 'ready') return 'Good to train';
+  if (state === 'recovering') return 'Give it time';
+  if (state === 'fatigued') return 'Rest this muscle';
   return 'Log history';
 }
 
@@ -1402,7 +1418,7 @@ function getMuscleFromBodySlug(slug, side, recovery) {
   return getDominantRecoveryItem(muscles.map((muscle) => recoveryByMuscle.get(muscle)).filter(Boolean))?.muscle || muscles[0] || '';
 }
 
-function calculateMuscleRecovery(workouts) {
+function calculateMuscleRecovery(workouts, recoveryDays = DEFAULT_RECOVERY_DAYS) {
   const recoveryByMuscle = new Map(
     RECOVERY_MUSCLES.map((muscle) => [
       muscle,
@@ -1441,14 +1457,14 @@ function calculateMuscleRecovery(workouts) {
     const recovery = recoveryByMuscle.get(muscle);
     const lastTrainedDate = recovery?.lastTrainedDate || '';
     const daysAgo = lastTrainedDate ? getDayDifference(lastTrainedDate) : null;
-    const recoveryPercent = getRecoveryPercent(daysAgo);
+    const recoveryPercent = getRecoveryPercent(daysAgo, recoveryDays);
     return {
       muscle,
       lastTrainedDate,
       daysAgo,
-      state: getRecoveryState(daysAgo),
+      state: getRecoveryState(daysAgo, recoveryDays),
       recoveryPercent,
-      readyDate: getEstimatedReadyDate(lastTrainedDate),
+      readyDate: getEstimatedReadyDate(lastTrainedDate, recoveryDays),
       exercises: recovery?.exercises || [],
       allExercises: recovery?.allExercises || recovery?.exercises || [],
       workoutCount: recovery?.workoutIds?.length || 0,
@@ -1595,9 +1611,9 @@ function WorkoutConsistencyCalendar({ workouts }) {
 
 function RecoveryInlineLegend() {
   const legendItems = [
-    { state: 'ready', label: 'Good to go' },
+    { state: 'ready', label: 'Ready' },
     { state: 'recovering', label: 'Recovering' },
-    { state: 'fatigued', label: 'Not recovered' },
+    { state: 'fatigued', label: 'Trained today' },
   ];
 
   return (
@@ -1652,9 +1668,14 @@ function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
 function MuscleRecoveryCard({ workouts }) {
   const [showInfo, setShowInfo] = useState(false);
   const [selectedMuscle, setSelectedMuscle] = useState(null);
-  const recovery = useMemo(() => calculateMuscleRecovery(workouts), [workouts]);
+  const [recoveryDays, setRecoveryDays] = useState(() => readRecoveryDays());
+  const recovery = useMemo(() => calculateMuscleRecovery(workouts, recoveryDays), [workouts, recoveryDays]);
   const readyMuscles = recovery.filter((item) => item.state === 'ready');
   const readyText = readyMuscles.length ? readyMuscles.slice(0, 3).map((item) => item.muscle).join(' \u2022 ') : 'Log workouts to build recovery history';
+  const updateRecoveryDays = (days) => {
+    setRecoveryDays(days);
+    saveRecoveryDays(days);
+  };
 
   return (
     <section className="dashboard-card recovery-card">
@@ -1668,9 +1689,23 @@ function MuscleRecoveryCard({ workouts }) {
             <span>{readyText}</span>
           </p>
         </div>
-        <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
-          <Info size={16} strokeWidth={2.4} />
-        </button>
+        <div className="recovery-head-actions">
+          <div className="recovery-days-toggle" aria-label="Recovery time">
+            {[1, 2].map((days) => (
+              <button
+                key={days}
+                type="button"
+                className={recoveryDays === days ? 'active' : ''}
+                onClick={() => updateRecoveryDays(days)}
+              >
+                {days} day
+              </button>
+            ))}
+          </div>
+          <button type="button" className="icon-button" onClick={() => setShowInfo(true)} aria-label="Recovery color info">
+            <Info size={16} strokeWidth={2.4} />
+          </button>
+        </div>
       </div>
       <MuscleAnatomyGraphic
         recovery={recovery}
@@ -1681,12 +1716,12 @@ function MuscleRecoveryCard({ workouts }) {
         <div className="modal-backdrop" role="presentation" onClick={() => setShowInfo(false)}>
           <div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-info-title" onClick={(event) => event.stopPropagation()}>
             <div className="sheet-header">
-              <h3 id="recovery-info-title">Recovery colors</h3>
+              <h3 id="recovery-info-title">Recovery timing</h3>
               <button type="button" className="sheet-close" aria-label="Close recovery info" onClick={() => setShowInfo(false)}>
                 <X size={18} strokeWidth={2.4} />
               </button>
             </div>
-            <p>Green means good to go, yellow means recovering, red means not recovered, and gray means no recent data yet.</p>
+            <p>Red means trained today. Orange means the muscle is still recovering. Green means it is ready based on your selected recovery setting.</p>
           </div>
         </div>
       ) : null}
@@ -2548,6 +2583,10 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
       {visibleWorkouts.map((workout) => {
         const isOpen = expanded === workout.id;
         const displayType = normalizeWorkoutType(workout.type);
+        const completedExercises = workout.exercises.filter((exercise) => getCompletedSetCount(exercise) > 0);
+        const totalSets = workout.exercises.reduce((total, exercise) => total + getCompletedSetCount(exercise), 0);
+        const duration = getWorkoutDurationSeconds(workout);
+        const exercisePreview = workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' - ');
         return (
           <div key={workout.id} className={`history-row ${swipedId === workout.id ? 'swiped' : ''}`}>
             <button
@@ -2567,23 +2606,46 @@ function HistoryScreen({ workouts, onOpenWorkout, onDeleteWorkout, onRenameExerc
               onTouchStart={(event) => handleTouchStart(event, workout.id)}
               onTouchEnd={(event) => handleTouchEnd(event, workout.id)}
             >
-              <button type="button" className="history-summary" onClick={() => setExpanded(isOpen ? null : workout.id)}>
-                <div>
-                  <strong>
-                    <CategoryMediaBadge type={displayType} size="sm" />
-                    {formatShortDate(workout.date)} - {workout.label}
-                  </strong>
-                  <p className="history-time">
-                    {displayType}
-                    {formatTime(workout.startedAt) ? ` - ${formatTime(workout.startedAt)}` : ''}
-                    {workout.effortRating ? ` - Effort ${workout.effortRating}/10` : ''}
-                  </p>
-                  <p className="history-meta">
-                    {workout.exercises.map((exercise) => exercise.name || 'Untitled').slice(0, 3).join(' - ')}
-                  </p>
+              <div className="history-summary">
+                <button type="button" className="history-summary-main" onClick={() => setExpanded(isOpen ? null : workout.id)}>
+                  <div className="history-summary-copy">
+                    <div className="history-title-line">
+                      <CategoryMediaBadge type={displayType} size="sm" />
+                      <div>
+                        <strong>{workout.label}</strong>
+                        <p>{formatShortDate(workout.date)}</p>
+                      </div>
+                    </div>
+                    <div className="history-chip-row" aria-label="Workout summary">
+                      <span>{displayType}</span>
+                      {formatTime(workout.startedAt) ? <span>{formatTime(workout.startedAt)}</span> : null}
+                      {Number.isFinite(duration) ? <span>{formatDuration(duration)}</span> : null}
+                      <span>{completedExercises.length} exercises</span>
+                      <span>{totalSets} sets</span>
+                      {workout.effortRating ? <span>Effort {workout.effortRating}/10</span> : null}
+                    </div>
+                    <p className="history-meta">{exercisePreview || 'No exercises logged'}</p>
+                  </div>
+                </button>
+                <div className="history-actions">
+                  <button
+                    type="button"
+                    className="icon-button danger history-delete-inline"
+                    aria-label={`Delete ${workout.label || 'workout'}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (expanded === workout.id) setExpanded(null);
+                      setSwipedId(null);
+                      onDeleteWorkout(workout.id);
+                    }}
+                  >
+                    <Trash2 size={15} strokeWidth={2.3} />
+                  </button>
+                  <span className={`history-chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
+                    <ArrowDown size={18} strokeWidth={2.35} />
+                  </span>
                 </div>
-                <span>{isOpen ? '-' : '+'}</span>
-              </button>
+              </div>
               {isOpen ? (
                 <div className="history-details">
                   {workout.exercises.map((exercise) => (
@@ -3254,6 +3316,7 @@ export default function App() {
     localStorage.removeItem(FAVORITE_EXERCISES_KEY);
     localStorage.removeItem(WGER_MEDIA_CACHE_KEY);
     localStorage.removeItem(APPLE_WATCH_REMINDER_KEY);
+    localStorage.removeItem(RECOVERY_DAYS_KEY);
     setTab('Workout');
   };
 
