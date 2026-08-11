@@ -1470,10 +1470,11 @@ function getExerciseRecoveryMuscles(exercise = {}) {
     else if (/\bab(s)?\b|plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
     else if (/pull\s*up|chin\s*up|pulldown|row|deadlift|shrug|back extension/.test(name)) muscle = 'Back';
     else if (/shoulder press|overhead press|arnold|lateral raise|front raise|rear delt|reverse pec|face pull|upright row/.test(name)) muscle = 'Shoulders';
+    else if (/hamstring curl|leg curl|prone curl|lying curl|nordic/.test(name)) muscle = 'Hamstrings';
     else if (/curl/.test(name)) muscle = 'Biceps';
     else if (/tricep|skull crusher|close grip/.test(name)) muscle = 'Triceps';
     else if (/squat|leg press|leg extension|lunge|step up/.test(name)) muscle = 'Quads';
-    else if (/leg curl|romanian|stiff leg|nordic/.test(name)) muscle = 'Hamstrings';
+    else if (/romanian|stiff leg/.test(name)) muscle = 'Hamstrings';
     else if (/hip thrust|glute|kickback|abduct|adduct/.test(name)) muscle = 'Glutes';
     else if (/calf/.test(name)) muscle = 'Calves';
   }
