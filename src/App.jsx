@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   Bike,
+  Camera,
   CalendarRange,
   ChartColumn,
   CheckCircle2,
@@ -1447,7 +1448,7 @@ function uniqueValues(values) {
 function getExerciseRecoveryMuscles(exercise = {}) {
   const name = normalizeSearchText(exercise.name);
   const meta = getExerciseMeta(exercise.name);
-  const muscleText = normalizeSearchText(exercise.muscle || meta?.muscle || '');
+  const muscleText = normalizeSearchText(exercise.muscle || meta?.muscle || exercise.type || '');
   let muscle = exercise.muscle || meta?.muscle || '';
   const groups = [];
 
@@ -1462,8 +1463,9 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   else if (/hamstring/.test(muscleText)) muscle = 'Hamstrings';
   else if (/glute/.test(muscleText)) muscle = 'Glutes';
   else if (/calf|calves/.test(muscleText)) muscle = 'Calves';
+  else if (/leg|lower/.test(muscleText)) muscle = 'Legs';
   else if (/full body/.test(muscleText)) muscle = 'Full Body';
-  else if (!muscle) {
+  if (!groups.length) {
     if (/bench|chest|pec|incline press|decline press|chest press|push up|dip|fly|crossover/.test(name)) muscle = 'Chest';
     else if (/\bab(s)?\b|plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
     else if (/pull\s*up|chin\s*up|pulldown|row|deadlift|shrug|back extension/.test(name)) muscle = 'Back';
@@ -1472,7 +1474,7 @@ function getExerciseRecoveryMuscles(exercise = {}) {
     else if (/tricep|skull crusher|close grip/.test(name)) muscle = 'Triceps';
     else if (/squat|leg press|leg extension|lunge|step up/.test(name)) muscle = 'Quads';
     else if (/leg curl|romanian|stiff leg|nordic/.test(name)) muscle = 'Hamstrings';
-    else if (/hip thrust|glute|kickback|abduction|adduction/.test(name)) muscle = 'Glutes';
+    else if (/hip thrust|glute|kickback|abduct|adduct/.test(name)) muscle = 'Glutes';
     else if (/calf/.test(name)) muscle = 'Calves';
   }
 
@@ -1513,6 +1515,8 @@ function getExerciseRecoveryMuscles(exercise = {}) {
     groups.push('Glutes');
   } else if (muscle === 'Calves') {
     groups.push('Calves');
+  } else if (muscle === 'Legs') {
+    groups.push('Quads', 'Glutes', 'Hamstrings', 'Calves');
   } else if (muscle === 'Full Body') {
     groups.push('Abs / core');
     if (/sled/.test(name)) groups.push('Quads', 'Glutes', 'Calves');
@@ -2064,11 +2068,14 @@ function AppleWatchReminderModal({ defaultRemind, onContinue, onClose }) {
   );
 }
 
-function PhotoPreviewModal({ exercise, mediaLibrary = {}, onClose }) {
+function PhotoPreviewModal({ exercise, mediaLibrary = {}, onReplace, onDiscard, onClose }) {
   const [failedUrl, setFailedUrl] = useState('');
   if (!exercise) return null;
   const media = getExerciseMedia(exercise, mediaLibrary);
-  const url = media.machinePhotoUrl || media.machinePhotoThumbnailUrl || getExerciseDemoUrl(exercise, mediaLibrary);
+  const meta = getExerciseMeta(exercise.name);
+  const muscles = getExerciseRecoveryMuscles(exercise);
+  const muscleLabel = muscles.length ? muscles.join(', ') : exercise.muscle || meta?.muscle || 'Muscle group';
+  const url = media.machinePhotoUrl || media.machinePhotoThumbnailUrl;
   const visibleUrl = url && url !== failedUrl ? url : '';
 
   return (
@@ -2081,10 +2088,31 @@ function PhotoPreviewModal({ exercise, mediaLibrary = {}, onClose }) {
           <img src={visibleUrl} alt="" onError={() => setFailedUrl(visibleUrl)} />
         ) : (
           <div className="photo-preview-empty">
-            <Dumbbell size={42} strokeWidth={2.1} />
-            <p>No photo saved for this exercise yet.</p>
+            <ExerciseMuscleThumbnail exercise={exercise} />
           </div>
         )}
+        <div className="photo-preview-muscle-chip">
+          <span className="photo-preview-muscle-icon" aria-hidden="true">
+            <ExerciseMuscleThumbnail exercise={exercise} />
+          </span>
+          <span>{muscleLabel}</span>
+        </div>
+        <div className="photo-preview-actions">
+          <button
+            type="button"
+            className="secondary-button danger-action"
+            onClick={() => {
+              onDiscard?.();
+              onClose();
+            }}
+          >
+            Discard
+          </button>
+          <button type="button" className="file-button" onClick={onReplace}>
+            <Camera size={17} strokeWidth={2.3} />
+            Replace
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2279,7 +2307,7 @@ function ExerciseHeroMedia({ exercise, mediaLibrary = {} }) {
       ) : visibleUrl ? (
         <img src={visibleUrl} alt="" loading="lazy" onError={() => setFailedUrl(visibleUrl)} />
       ) : (
-        <Dumbbell size={36} strokeWidth={2.1} />
+        <ExerciseMuscleThumbnail exercise={exercise} />
       )}
     </div>
   );
@@ -2415,10 +2443,10 @@ function ExerciseDetailModal({ exercise, mediaLibrary = {}, onClose, onMediaChan
       <div className="info-modal exercise-detail-modal" role="dialog" aria-modal="true" aria-labelledby="exercise-detail-title" onClick={(event) => event.stopPropagation()}>
         <div className="sheet-header">
           <div>
-            <h3 id="exercise-detail-title">{exercise.name || 'Exercise details'}</h3>
+            <h3 id="exercise-detail-title">{exercise.name || 'Info'}</h3>
             <p>{[meta.muscle, meta.equipment, formatTrackingLabel(exercise.tracking)].filter(Boolean).join(' - ')}</p>
           </div>
-          <button type="button" className="sheet-close" aria-label="Close exercise details" onClick={onClose}>
+          <button type="button" className="sheet-close" aria-label="Close info" onClick={onClose}>
             <X size={18} strokeWidth={2.4} />
           </button>
         </div>
@@ -2563,6 +2591,18 @@ function ActiveWorkoutScreen({
     }
   };
 
+  const discardMachinePhoto = (exerciseId) => {
+    const exercise = workout.exercises.find((item) => item.id === exerciseId);
+    const storedMedia = exercise?.media || {};
+    updateExerciseMedia(exerciseId, {
+      ...storedMedia,
+      mediaSource: storedMedia.imageUrl || storedMedia.thumbnailUrl || storedMedia.videoUrl || storedMedia.animationUrl ? normalizeMediaSource(storedMedia.mediaSource, 'custom') : 'custom',
+      machinePhotoUrl: '',
+      machinePhotoThumbnailUrl: '',
+      machinePhotoUpdatedAt: '',
+    });
+  };
+
   const updateSet = (exerciseId, setId, field, value) => {
     setLastEditedFieldId(`${exerciseId}-${setId}-${field}`);
     onUpdate({
@@ -2680,7 +2720,6 @@ function ActiveWorkoutScreen({
           const isFavorite = favoriteExercises.map(normalizeName).includes(normalizeName(exercise.name));
           const photoInputId = `quick-machine-photo-${exercise.id}`;
           const thumbnailStatus = thumbnailUploadStatus[exercise.id];
-          const photoActionLabel = hasMachinePhoto(exercise, mediaLibrary) ? 'Replace machine photo' : 'Take machine photo';
           return (
             <section key={exercise.id} className="exercise-card">
               <div className="exercise-card-top">
@@ -2695,8 +2734,8 @@ function ActiveWorkoutScreen({
                 <button
                   type="button"
                   className="exercise-thumbnail-button"
-                  onClick={() => document.getElementById(photoInputId)?.click()}
-                  aria-label={`${photoActionLabel} for ${exercise.name || 'exercise'}`}
+                  onClick={() => setPhotoPreviewExerciseId(exercise.id)}
+                  aria-label={`View image for ${exercise.name || 'exercise'}`}
                 >
                   <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} photoOnly />
                   {thumbnailStatus === 'loading' ? <span className="thumbnail-upload-indicator" aria-hidden="true" /> : null}
@@ -2756,7 +2795,7 @@ function ActiveWorkoutScreen({
                         }}
                       >
                         <Info size={16} strokeWidth={2.4} />
-                        Exercise info
+                        Info
                       </button>
                       <button
                         type="button"
@@ -2978,6 +3017,12 @@ function ActiveWorkoutScreen({
       <PhotoPreviewModal
         exercise={photoPreviewExercise}
         mediaLibrary={mediaLibrary}
+        onReplace={() => {
+          if (photoPreviewExercise) document.getElementById(`quick-machine-photo-${photoPreviewExercise.id}`)?.click();
+        }}
+        onDiscard={() => {
+          if (photoPreviewExercise) discardMachinePhoto(photoPreviewExercise.id);
+        }}
         onClose={() => setPhotoPreviewExerciseId(null)}
       />
     </div>

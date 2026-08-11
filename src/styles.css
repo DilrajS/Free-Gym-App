@@ -1144,12 +1144,13 @@ p {
   max-height: calc(100vh - 24px);
   position: relative;
   display: grid;
+  gap: 14px;
   place-items: center;
 }
 .photo-preview-modal img {
   width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh - 168px);
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.12);
   background: var(--surface);
@@ -1176,6 +1177,58 @@ p {
   gap: 10px;
   color: var(--muted);
   text-align: center;
+}
+.photo-preview-empty svg:not(.lucide) {
+  width: min(72%, 220px);
+  height: auto;
+}
+.photo-preview-muscle-chip {
+  width: min(360px, 100%);
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.035);
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 780;
+  line-height: 1.2;
+}
+.photo-preview-muscle-chip span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.photo-preview-muscle-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.photo-preview-muscle-icon svg:not(.lucide) {
+  width: 88%;
+  height: 100%;
+}
+.photo-preview-actions {
+  width: min(360px, 100%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  justify-items: stretch;
+}
+.photo-preview-actions .file-button,
+.photo-preview-actions .secondary-button {
+  width: 100%;
+  cursor: pointer;
+}
+.photo-preview-actions .danger-action {
+  color: var(--accent-strong);
 }
 .add-row {
   position: relative;
@@ -1243,6 +1296,12 @@ p {
   display: grid;
   place-items: center;
   overflow: hidden;
+}
+.exercise-hero-media.placeholder svg:not(.lucide) {
+  width: min(68%, 250px);
+  height: 92%;
+  overflow: visible;
+  filter: drop-shadow(0 14px 18px rgba(0,0,0,0.42));
 }
 .media-source-row {
   display: flex;
