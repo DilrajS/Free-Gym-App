@@ -819,6 +819,7 @@ p {
   flex: 0 0 52px;
   display: inline-grid;
   place-items: center;
+  position: relative;
 }
 .exercise-thumbnail {
   width: 48px;
@@ -857,6 +858,35 @@ p {
   background:
     linear-gradient(145deg, rgba(229,72,77,0.14), rgba(118,168,255,0.08)),
     rgba(255,255,255,0.025);
+}
+.exercise-thumbnail.placeholder svg:not(.lucide) {
+  width: 84%;
+  height: 94%;
+  overflow: visible;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.42));
+}
+.exercise-thumbnail.sm.placeholder svg:not(.lucide) {
+  width: 82%;
+  height: 92%;
+}
+.exercise-thumbnail.lg.placeholder svg:not(.lucide) {
+  width: 76%;
+  height: 92%;
+}
+.thumbnail-upload-indicator {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.26);
+  border-top-color: var(--accent);
+  background: rgba(17,20,25,0.84);
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 .exercise-title-wrap { flex: 1; min-width: 0; display: grid; gap: 6px; }
 .exercise-title-input {

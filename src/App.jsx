@@ -281,6 +281,10 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
+function normalizeSearchText(value) {
+  return normalizeName(value).replace(/[^a-z0-9]+/g, ' ');
+}
+
 function normalizeWorkoutType(type) {
   const value = String(type || '').trim();
   if (!value) return 'Custom';
@@ -329,6 +333,11 @@ function getExerciseMedia(exercise = {}, mediaLibrary = {}) {
 function getExerciseThumbnailUrl(exercise = {}, mediaLibrary = {}) {
   const media = getExerciseMedia(exercise, mediaLibrary);
   return media.machinePhotoThumbnailUrl || media.thumbnailUrl || media.imageUrl || '';
+}
+
+function hasMachinePhoto(exercise = {}, mediaLibrary = {}) {
+  const media = getExerciseMedia(exercise, mediaLibrary);
+  return Boolean(media.machinePhotoUrl || media.machinePhotoThumbnailUrl);
 }
 
 function getExerciseDemoUrl(exercise = {}, mediaLibrary = {}) {
@@ -1424,15 +1433,47 @@ const BACK_BODY_SLUG_MUSCLES = {
   hamstring: ['Hamstrings'],
   calves: ['Calves'],
 };
+const MUSCLE_THUMBNAIL_STATE_COLORS = {
+  active: '#63df91',
+  secondary: '#50b8ff',
+  inactive: '#343d49',
+};
 
 function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
 function getExerciseRecoveryMuscles(exercise = {}) {
-  const name = normalizeName(exercise.name);
-  const muscle = exercise.muscle || getExerciseMeta(exercise.name)?.muscle || '';
+  const name = normalizeSearchText(exercise.name);
+  const meta = getExerciseMeta(exercise.name);
+  const muscleText = normalizeSearchText(exercise.muscle || meta?.muscle || '');
+  let muscle = exercise.muscle || meta?.muscle || '';
   const groups = [];
+
+  if (/chest|pec/.test(muscleText)) muscle = 'Chest';
+  else if (/core|abs|abdominal|oblique/.test(muscleText)) muscle = 'Core';
+  else if (/back|lat/.test(muscleText)) muscle = 'Back';
+  else if (/shoulder|delt/.test(muscleText)) muscle = 'Shoulders';
+  else if (/bicep/.test(muscleText)) muscle = 'Biceps';
+  else if (/tricep/.test(muscleText)) muscle = 'Triceps';
+  else if (/forearm/.test(muscleText)) muscle = 'Forearms';
+  else if (/quad/.test(muscleText)) muscle = 'Quads';
+  else if (/hamstring/.test(muscleText)) muscle = 'Hamstrings';
+  else if (/glute/.test(muscleText)) muscle = 'Glutes';
+  else if (/calf|calves/.test(muscleText)) muscle = 'Calves';
+  else if (/full body/.test(muscleText)) muscle = 'Full Body';
+  else if (!muscle) {
+    if (/bench|chest|pec|incline press|decline press|chest press|push up|dip|fly|crossover/.test(name)) muscle = 'Chest';
+    else if (/plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
+    else if (/pull\s*up|chin\s*up|pulldown|row|deadlift|shrug|back extension/.test(name)) muscle = 'Back';
+    else if (/shoulder press|overhead press|arnold|lateral raise|front raise|rear delt|reverse pec|face pull|upright row/.test(name)) muscle = 'Shoulders';
+    else if (/curl/.test(name)) muscle = 'Biceps';
+    else if (/tricep|skull crusher|close grip/.test(name)) muscle = 'Triceps';
+    else if (/squat|leg press|leg extension|lunge|step up/.test(name)) muscle = 'Quads';
+    else if (/leg curl|romanian|stiff leg|nordic/.test(name)) muscle = 'Hamstrings';
+    else if (/hip thrust|glute|kickback|abduction|adduction/.test(name)) muscle = 'Glutes';
+    else if (/calf/.test(name)) muscle = 'Calves';
+  }
 
   if (muscle === 'Chest') {
     groups.push('Chest / pecs');
@@ -1619,6 +1660,29 @@ function calculateMuscleRecovery(workouts, recoveryDays = DEFAULT_RECOVERY_DAYS)
       workoutCount: recovery?.workoutIds?.length || 0,
     };
   });
+}
+
+function hasCompletedExerciseSet(exercise = {}) {
+  return (exercise.sets || []).some((set) => isSetComplete(set, exercise.tracking));
+}
+
+function promoteCompletedExercise(exercises = [], exerciseId) {
+  const index = exercises.findIndex((exercise) => exercise.id === exerciseId);
+  if (index < 0) return exercises;
+  const exercise = exercises[index];
+  if (!hasCompletedExerciseSet(exercise)) return exercises;
+  const before = exercises.slice(0, index);
+  const after = exercises.slice(index + 1);
+  const completedBefore = before.filter(hasCompletedExerciseSet);
+  const skippedBefore = before.filter((item) => !hasCompletedExerciseSet(item));
+  if (!skippedBefore.length) return exercises;
+  return [...completedBefore, exercise, ...skippedBefore, ...after];
+}
+
+function organizeWorkoutExercises(exercises = []) {
+  const completed = exercises.filter(hasCompletedExerciseSet);
+  const skipped = exercises.filter((exercise) => !hasCompletedExerciseSet(exercise));
+  return [...completed, ...skipped];
 }
 
 function getExerciseFieldConfig(exercise, showAddedWeight = false) {
@@ -2144,11 +2208,49 @@ function TimerPill({ secondsLeft, active, onReset }) {
   );
 }
 
-function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {} }) {
+function ExerciseMuscleThumbnail({ exercise }) {
+  const muscles = getExerciseRecoveryMuscles(exercise);
+  if (!muscles.length) return <Dumbbell size={20} strokeWidth={2.2} />;
+
+  const frontMatches = Object.values(FRONT_BODY_SLUG_MUSCLES).flat().filter((muscle) => muscles.includes(muscle)).length;
+  const backMatches = Object.values(BACK_BODY_SLUG_MUSCLES).flat().filter((muscle) => muscles.includes(muscle)).length;
+  const side = frontMatches >= backMatches ? 'front' : 'back';
+  const slugMuscles = getBodySlugMuscleMap(side);
+  const data = Object.entries(slugMuscles).map(([slug, slugMuscleNames]) => {
+    const matchedCount = slugMuscleNames.filter((muscle) => muscles.includes(muscle)).length;
+    const state = matchedCount > 1 ? 'secondary' : matchedCount === 1 ? 'active' : 'inactive';
+    const selected = matchedCount > 0;
+    return {
+      slug,
+      color: MUSCLE_THUMBNAIL_STATE_COLORS[state],
+      styles: {
+        fill: MUSCLE_THUMBNAIL_STATE_COLORS[state],
+        stroke: selected ? 'rgba(245, 250, 255, 0.86)' : 'rgba(8, 12, 18, 0.56)',
+        strokeWidth: selected ? 2 : 1,
+      },
+    };
+  });
+
+  return (
+    <MuscleBody
+      data={data}
+      side={side}
+      gender="male"
+      scale={1}
+      border="rgba(209, 218, 231, 0.16)"
+      defaultFill="rgba(51, 61, 73, 0.72)"
+      defaultStroke="rgba(8, 12, 18, 0.62)"
+      defaultStrokeWidth={1}
+      hiddenParts={getBodyHiddenParts(side)}
+    />
+  );
+}
+
+function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {}, photoOnly = false }) {
   const [failedUrl, setFailedUrl] = useState('');
-  const url = getExerciseThumbnailUrl(exercise, mediaLibrary);
-  const visibleUrl = url && url !== failedUrl ? url : '';
   const media = getExerciseMedia(exercise, mediaLibrary);
+  const url = photoOnly ? media.machinePhotoThumbnailUrl : getExerciseThumbnailUrl(exercise, mediaLibrary);
+  const visibleUrl = url && url !== failedUrl ? url : '';
   const label = media.machinePhotoThumbnailUrl ? 'Machine photo' : 'Exercise image';
 
   return (
@@ -2156,7 +2258,7 @@ function ExerciseMediaThumbnail({ exercise, size = 'md', mediaLibrary = {} }) {
       {visibleUrl ? (
         <img src={visibleUrl} alt="" loading="lazy" onError={() => setFailedUrl(visibleUrl)} />
       ) : (
-        <Dumbbell size={size === 'sm' ? 15 : 20} strokeWidth={2.2} />
+        <ExerciseMuscleThumbnail exercise={exercise} />
       )}
     </div>
   );
@@ -2219,7 +2321,7 @@ function MachinePhotoUploader({ exercise, mediaLibrary = {}, onChange }) {
         <p>Use this to remember which exact machine you used.</p>
       </div>
       <div className="machine-photo-row">
-        <ExerciseMediaThumbnail exercise={exercise} size="lg" mediaLibrary={mediaLibrary} />
+        <ExerciseMediaThumbnail exercise={exercise} size="lg" mediaLibrary={mediaLibrary} photoOnly />
         <div className="machine-photo-actions">
           <input id={inputId} className="sr-only" type="file" accept="image/*" onChange={handleFileChange} />
           <label className="file-button" htmlFor={inputId}>
@@ -2355,6 +2457,7 @@ function ActiveWorkoutScreen({
   const [detailExerciseId, setDetailExerciseId] = useState(null);
   const [photoPreviewExerciseId, setPhotoPreviewExerciseId] = useState(null);
   const [openExerciseMenuId, setOpenExerciseMenuId] = useState(null);
+  const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState({});
   const exerciseOptions = useMemo(
     () => getExerciseOptions(workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises),
     [workouts, workout, exerciseFilter, mediaLibrary, favoriteExercises],
@@ -2435,6 +2538,30 @@ function ActiveWorkoutScreen({
     });
   };
 
+  const handleThumbnailPhotoChange = async (exerciseId, event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setThumbnailUploadStatus((current) => ({ ...current, [exerciseId]: 'loading' }));
+    try {
+      const thumbnailUrl = await resizeMachinePhoto(file);
+      const exercise = workout.exercises.find((item) => item.id === exerciseId);
+      const storedMedia = exercise?.media || {};
+      updateExerciseMedia(exerciseId, {
+        ...storedMedia,
+        mediaSource: 'user_photo',
+        machinePhotoUrl: thumbnailUrl,
+        machinePhotoThumbnailUrl: thumbnailUrl,
+        machinePhotoUpdatedAt: nowValue(),
+      });
+      setThumbnailUploadStatus((current) => ({ ...current, [exerciseId]: 'saved' }));
+    } catch (uploadError) {
+      setThumbnailUploadStatus((current) => ({ ...current, [exerciseId]: 'error' }));
+      window.alert(uploadError.message || 'Could not use that photo.');
+    }
+  };
+
   const updateSet = (exerciseId, setId, field, value) => {
     setLastEditedFieldId(`${exerciseId}-${setId}-${field}`);
     onUpdate({
@@ -2511,6 +2638,10 @@ function ActiveWorkoutScreen({
     const exercise = workout.exercises.find((item) => item.id === exerciseId);
     const set = exercise?.sets.find((item) => item.id === setId);
     if (exercise && set && isSetComplete(set, exercise.tracking)) {
+      const promotedExercises = promoteCompletedExercise(workout.exercises, exerciseId);
+      if (promotedExercises !== workout.exercises) {
+        onUpdate({ ...workout, exercises: promotedExercises });
+      }
       onResetTimer();
       onCelebrate?.(event?.target);
     }
@@ -2546,17 +2677,34 @@ function ActiveWorkoutScreen({
               || exercise.sets.some((set) => String(set.weight || set.previousWeight || '').trim()));
           const fields = getExerciseFieldConfig(exercise, showAddedWeight);
           const isFavorite = favoriteExercises.map(normalizeName).includes(normalizeName(exercise.name));
+          const photoInputId = `quick-machine-photo-${exercise.id}`;
+          const thumbnailStatus = thumbnailUploadStatus[exercise.id];
+          const photoActionLabel = hasMachinePhoto(exercise, mediaLibrary) ? 'Replace machine photo' : 'Take machine photo';
           return (
             <section key={exercise.id} className="exercise-card">
               <div className="exercise-card-top">
+                <input
+                  id={photoInputId}
+                  className="sr-only"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) => handleThumbnailPhotoChange(exercise.id, event)}
+                />
                 <button
                   type="button"
                   className="exercise-thumbnail-button"
-                  onClick={() => setPhotoPreviewExerciseId(exercise.id)}
-                  aria-label={`Preview photo for ${exercise.name || 'exercise'}`}
+                  onClick={() => document.getElementById(photoInputId)?.click()}
+                  aria-label={`${photoActionLabel} for ${exercise.name || 'exercise'}`}
                 >
-                  <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} />
+                  <ExerciseMediaThumbnail exercise={exercise} mediaLibrary={mediaLibrary} photoOnly />
+                  {thumbnailStatus === 'loading' ? <span className="thumbnail-upload-indicator" aria-hidden="true" /> : null}
                 </button>
+                {thumbnailStatus ? (
+                  <span className="sr-only" aria-live="polite">
+                    {thumbnailStatus === 'loading' ? 'Processing photo' : thumbnailStatus === 'saved' ? 'Photo saved' : 'Photo upload failed'}
+                  </span>
+                ) : null}
                 <div className="exercise-title-wrap">
                   <textarea
                     className="exercise-title-input"
@@ -3488,7 +3636,7 @@ export default function App() {
     }
     const effortInput = window.prompt('Effort rating for this workout? 1-10, optional:', activeWorkout.effortRating || '');
     const effortRating = effortInput === null ? activeWorkout.effortRating || '' : String(effortInput || '').trim().slice(0, 2);
-    const completedWorkout = { ...activeWorkout, effortRating, completedAt: nowValue() };
+    const completedWorkout = { ...activeWorkout, exercises: organizeWorkoutExercises(activeWorkout.exercises), effortRating, completedAt: nowValue() };
     const nextWorkouts = [completedWorkout, ...workouts.filter((workout) => workout.id !== completedWorkout.id)];
     saveData({ workouts: nextWorkouts });
     setWorkouts(nextWorkouts);
