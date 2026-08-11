@@ -179,6 +179,7 @@ const EXERCISE_LIBRARY = [
   { name: 'Ab Wheel Rollout', muscle: 'Core', type: 'Core', equipment: 'Ab Wheel', tracking: 'bodyweight' },
   { name: 'Decline Sit Up', muscle: 'Core', type: 'Core', equipment: 'Bench', tracking: 'bodyweight' },
   { name: 'Russian Twist', muscle: 'Core', type: 'Core', equipment: 'Medicine Ball', tracking: 'weight/reps' },
+  { name: 'Ab Machine', muscle: 'Core', type: 'Core', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Machine Crunch', muscle: 'Core', type: 'Core', equipment: 'Machine', tracking: 'weight/reps' },
   { name: 'Reverse Crunch', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
   { name: 'Bicycle Crunch', muscle: 'Core', type: 'Core', equipment: 'Bodyweight', tracking: 'bodyweight' },
@@ -1464,7 +1465,7 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   else if (/full body/.test(muscleText)) muscle = 'Full Body';
   else if (!muscle) {
     if (/bench|chest|pec|incline press|decline press|chest press|push up|dip|fly|crossover/.test(name)) muscle = 'Chest';
-    else if (/plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
+    else if (/\bab(s)?\b|plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
     else if (/pull\s*up|chin\s*up|pulldown|row|deadlift|shrug|back extension/.test(name)) muscle = 'Back';
     else if (/shoulder press|overhead press|arnold|lateral raise|front raise|rear delt|reverse pec|face pull|upright row/.test(name)) muscle = 'Shoulders';
     else if (/curl/.test(name)) muscle = 'Biceps';
