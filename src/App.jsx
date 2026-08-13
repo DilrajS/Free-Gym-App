@@ -1451,6 +1451,9 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   const muscleText = normalizeSearchText(exercise.muscle || meta?.muscle || exercise.type || '');
   let muscle = exercise.muscle || meta?.muscle || '';
   const groups = [];
+  const isChestPressName =
+    /\b(chest\s*)?press\b/.test(name)
+    && !/\b(shoulder|overhead|military|arnold|leg|tricep|triceps)\b/.test(name);
 
   if (/chest|pec/.test(muscleText)) muscle = 'Chest';
   else if (/core|abs|abdominal|oblique/.test(muscleText)) muscle = 'Core';
@@ -1466,7 +1469,7 @@ function getExerciseRecoveryMuscles(exercise = {}) {
   else if (/leg|lower/.test(muscleText)) muscle = 'Legs';
   else if (/full body/.test(muscleText)) muscle = 'Full Body';
   if (!groups.length) {
-    if (/bench|chest|pec|incline press|decline press|chest press|push up|dip|fly|crossover/.test(name)) muscle = 'Chest';
+    if (/bench|chest|pec|incline press|decline press|push up|dip|fly|crossover/.test(name) || isChestPressName) muscle = 'Chest';
     else if (/\bab(s)?\b|plank|crunch|sit up|leg raise|knee raise|ab wheel|pallof|wood chop|russian twist|dead bug|bicycle/.test(name)) muscle = 'Core';
     else if (/pull\s*up|chin\s*up|pulldown|row|deadlift|shrug|back extension/.test(name)) muscle = 'Back';
     else if (/shoulder press|overhead press|arnold|lateral raise|front raise|rear delt|reverse pec|face pull|upright row/.test(name)) muscle = 'Shoulders';
@@ -1481,7 +1484,7 @@ function getExerciseRecoveryMuscles(exercise = {}) {
 
   if (muscle === 'Chest') {
     groups.push('Chest / pecs');
-    if (/bench|chest press|push up|dip/.test(name)) groups.push('Front delts', 'Triceps');
+    if (/bench|chest press|push up|dip/.test(name) || isChestPressName) groups.push('Front delts', 'Triceps');
     if (/pullover/.test(name)) groups.push('Lats / upper back');
   } else if (muscle === 'Back') {
     groups.push('Lats / upper back');
@@ -3229,12 +3232,135 @@ function TemplatesScreen({ templates, onStartTemplate, onDeleteTemplate }) {
   );
 }
 
+function getWeekStartKey(dateKey) {
+  return getDateKey(getWeekStart(getLocalDateFromKey(dateKey)));
+}
+
+function getProgressSummary(workouts = []) {
+  const completedWorkouts = workouts.filter((workout) => (workout.exercises || []).some(hasCompletedExerciseSet));
+  const sortedWorkouts = [...completedWorkouts].sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
+  const chronologicalWorkouts = [...completedWorkouts].sort((a, b) => getWorkoutTime(a) - getWorkoutTime(b));
+  const currentWeekKey = getWeekStartKey(todayValue());
+  const previousWeekKey = getDateKey(addDays(getLocalDateFromKey(currentWeekKey), -7));
+  const weekly = new Map();
+  const exerciseMap = new Map();
+  const prHighlights = [];
+
+  chronologicalWorkouts.forEach((workout) => {
+    const weekKey = getWeekStartKey(workout.date || getWorkoutLogDate(workout));
+    const week = weekly.get(weekKey) || { weekKey, sessions: 0, sets: 0, volume: 0, reps: 0, duration: 0 };
+    week.sessions += 1;
+    week.duration += getSafeWorkoutDurationSeconds(workout) || 0;
+
+    (workout.exercises || []).forEach((exercise) => {
+      if (!hasCompletedExerciseSet(exercise)) return;
+      const summary = summarizeExercise(exercise);
+      week.sets += summary.sets;
+      week.volume += summary.volume;
+      week.reps += summary.reps;
+
+      const normalized = normalizeName(exercise.name);
+      if (!normalized) return;
+      const current = exerciseMap.get(normalized) || {
+        name: exercise.name,
+        type: normalizeWorkoutType(exercise.type || getExerciseMeta(exercise.name)?.type || workout.type || 'Custom'),
+        sessions: 0,
+        sets: 0,
+        volume: 0,
+        reps: 0,
+        maxWeight: 0,
+        estimated1rm: 0,
+        lastDate: '',
+        previousMaxWeight: 0,
+        previousEstimated1rm: 0,
+      };
+      current.sessions += 1;
+      current.sets += summary.sets;
+      current.volume += summary.volume;
+      current.reps += summary.reps;
+      if (current.lastDate && workout.date < current.lastDate) {
+        current.previousMaxWeight = Math.max(current.previousMaxWeight, summary.maxWeight);
+        current.previousEstimated1rm = Math.max(current.previousEstimated1rm, summary.estimated1rm);
+      } else if (!current.lastDate || workout.date >= current.lastDate) {
+        current.previousMaxWeight = Math.max(current.previousMaxWeight, current.maxWeight);
+        current.previousEstimated1rm = Math.max(current.previousEstimated1rm, current.estimated1rm);
+        current.lastDate = workout.date;
+      }
+      current.maxWeight = Math.max(current.maxWeight, summary.maxWeight);
+      current.estimated1rm = Math.max(current.estimated1rm, summary.estimated1rm);
+      exerciseMap.set(normalized, current);
+    });
+
+    weekly.set(weekKey, week);
+  });
+
+  const currentWeek = weekly.get(currentWeekKey) || { sessions: 0, sets: 0, volume: 0, reps: 0, duration: 0 };
+  const previousWeek = weekly.get(previousWeekKey) || { sessions: 0, sets: 0, volume: 0, reps: 0, duration: 0 };
+  const weekDelta = {
+    sessions: currentWeek.sessions - previousWeek.sessions,
+    sets: currentWeek.sets - previousWeek.sets,
+    volume: currentWeek.volume - previousWeek.volume,
+  };
+
+  const exerciseSummaries = [...exerciseMap.values()].sort((a, b) =>
+    b.sessions - a.sessions
+    || b.estimated1rm - a.estimated1rm
+    || b.volume - a.volume
+    || a.name.localeCompare(b.name),
+  );
+
+  exerciseSummaries.forEach((exercise) => {
+    if (exercise.maxWeight > exercise.previousMaxWeight && exercise.previousMaxWeight > 0) {
+      prHighlights.push({
+        id: `${exercise.name}-max`,
+        name: exercise.name,
+        label: 'Max weight',
+        value: `${formatNumber(exercise.maxWeight, exercise.maxWeight % 1 === 0 ? 0 : 2)} lb`,
+        previous: `${formatNumber(exercise.previousMaxWeight, exercise.previousMaxWeight % 1 === 0 ? 0 : 2)} lb`,
+      });
+    } else if (exercise.estimated1rm > exercise.previousEstimated1rm && exercise.previousEstimated1rm > 0) {
+      prHighlights.push({
+        id: `${exercise.name}-1rm`,
+        name: exercise.name,
+        label: 'Estimated 1RM',
+        value: `${exercise.estimated1rm} lb`,
+        previous: `${exercise.previousEstimated1rm} lb`,
+      });
+    }
+  });
+
+  const weeklyPoints = [...weekly.values()]
+    .sort((a, b) => new Date(a.weekKey) - new Date(b.weekKey))
+    .slice(-8)
+    .map((week) => ({
+      date: week.weekKey,
+      value: week.volume || week.sets || week.sessions,
+    }));
+
+  return {
+    lastWorkout: sortedWorkouts[0] || null,
+    currentWeek,
+    previousWeek,
+    weekDelta,
+    weeklyPoints,
+    topExercises: exerciseSummaries.slice(0, 5),
+    prHighlights: prHighlights.slice(0, 4),
+  };
+}
+
+function formatSignedNumber(value, suffix = '') {
+  if (!value) return `0${suffix}`;
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${formatNumber(value, Math.abs(value) % 1 === 0 ? 0 : 1)}${suffix}`;
+}
+
 function ChartsScreen({ workouts }) {
   const [category, setCategory] = useState('All');
   const [exerciseName, setExerciseName] = useState('');
   const [rangeId, setRangeId] = useState('90');
   const [metric, setMetric] = useState('sessions');
   const exerciseOptions = useMemo(() => getExerciseOptions(workouts, null, category), [workouts, category]);
+  const progress = useMemo(() => getProgressSummary(workouts), [workouts]);
   const availableMetrics = useMemo(
     () => getAvailableChartMetrics(workouts, category, exerciseName),
     [workouts, category, exerciseName],
@@ -3253,44 +3379,115 @@ function ChartsScreen({ workouts }) {
 
   return (
     <div className="screen stack-md">
-      <PageHeader title="Progress" subtitle="See how your training is improving." />
+      <PageHeader title="Progress" subtitle="Training signals worth acting on." />
       {!workouts.length ? (
         <EmptyState
           icon={TrendingUp}
           title="No progress yet"
-          body="Log a few workouts to see progress charts."
+          body="Log a few workouts to see weekly trends, PRs, and top exercises."
         />
       ) : (
         <>
           <div className="progress-stats-grid">
-            <StatCard label="Total workouts" value={stats.totalWorkouts} />
+            <StatCard label="This week" value={`${progress.currentWeek.sessions} sessions`} />
             <StatCard label="Current streak" value={`${stats.currentStreak}d`} />
-            <StatCard label="Time trained" value={formatDurationReadable(stats.totalTime) || '0m'} />
-            <StatCard label="Total sets" value={stats.totalSets} />
+            <StatCard label="Weekly sets" value={progress.currentWeek.sets} />
+            <StatCard label="Weekly volume" value={progress.currentWeek.volume ? `${Math.round(progress.currentWeek.volume / 1000)}k` : '0'} />
           </div>
+
+          <section className="progress-hero-card">
+            <div className="progress-hero-copy">
+              <span className="tiny-label">This week vs last week</span>
+              <h2>{formatSignedNumber(progress.weekDelta.sets)} sets</h2>
+              <p>
+                {formatSignedNumber(progress.weekDelta.sessions)} sessions, {formatSignedNumber(Math.round(progress.weekDelta.volume / 1000), 'k')} volume.
+                {progress.lastWorkout ? ` Last workout: ${progress.lastWorkout.label || progress.lastWorkout.type} ${formatRelativeDate(progress.lastWorkout.date)}.` : ''}
+              </p>
+            </div>
+            <div className="progress-hero-icon" aria-hidden="true">
+              <TrendingUp size={30} strokeWidth={2.2} />
+            </div>
+          </section>
+
           <section className="chart-card chart-card-primary">
             <div className="chart-title-row">
               <div>
-                <strong>{selectedMetric.label}</strong>
-                <p>{exerciseName || `${normalizeWorkoutType(category)} workouts`}</p>
+                <strong>Weekly training load</strong>
+                <p>Volume when available, otherwise sets or sessions.</p>
               </div>
-              <span>{points.length} points</span>
+              <span>{progress.weeklyPoints.length} weeks</span>
             </div>
-            {points.length ? (
-              <MiniChart points={points} metricLabel={selectedMetric.label} metricId={selectedMetric.id} />
+            {progress.weeklyPoints.length ? (
+              <MiniChart points={progress.weeklyPoints} metricLabel="Weekly training load" metricId="volume" />
             ) : (
               <div className="empty-panel compact">
                 <Activity size={24} strokeWidth={2.2} />
-                <strong>No matching data.</strong>
-                <p>Try another metric, more time, or a different exercise.</p>
+                <strong>More history needed.</strong>
+                <p>Log another week to see the trend.</p>
               </div>
             )}
           </section>
+
+          <section className="progress-section">
+            <SectionHeader title="Recent PRs" />
+            {progress.prHighlights.length ? (
+              <div className="progress-list">
+                {progress.prHighlights.map((pr) => (
+                  <div key={pr.id} className="progress-list-row">
+                    <Trophy size={18} strokeWidth={2.3} />
+                    <span>
+                      <strong>{pr.name}</strong>
+                      <small>{pr.label}: {pr.value} from {pr.previous}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="progress-note">No new strength PRs detected yet. Beat a previous max weight or estimated 1RM to show one here.</div>
+            )}
+          </section>
+
+          <section className="progress-section">
+            <SectionHeader title="Most Trained" />
+            <div className="progress-list">
+              {progress.topExercises.map((exercise) => (
+                <div key={exercise.name} className="progress-list-row">
+                  <CategoryMediaBadge type={exercise.type} size="sm" />
+                  <span>
+                    <strong>{exercise.name}</strong>
+                    <small>
+                      {exercise.sessions} sessions | {exercise.sets} sets
+                      {exercise.maxWeight ? ` | max ${formatNumber(exercise.maxWeight, exercise.maxWeight % 1 === 0 ? 0 : 2)} lb` : ''}
+                    </small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <details className="chart-controls filter-details">
             <summary>
               <ListFilter size={16} strokeWidth={2.2} />
-              Filters
+              Explore chart
             </summary>
+            <section className="chart-card chart-card-primary">
+              <div className="chart-title-row">
+                <div>
+                  <strong>{selectedMetric.label}</strong>
+                  <p>{exerciseName || `${normalizeWorkoutType(category)} workouts`}</p>
+                </div>
+                <span>{points.length} points</span>
+              </div>
+              {points.length ? (
+                <MiniChart points={points} metricLabel={selectedMetric.label} metricId={selectedMetric.id} />
+              ) : (
+                <div className="empty-panel compact">
+                  <Activity size={24} strokeWidth={2.2} />
+                  <strong>No matching data.</strong>
+                  <p>Try another metric, more time, or a different exercise.</p>
+                </div>
+              )}
+            </section>
             <div className="control-block">
               <span>Category</span>
               <div className="filter-row filter-row-scroll">

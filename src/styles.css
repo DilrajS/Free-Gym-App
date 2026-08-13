@@ -1683,6 +1683,88 @@ p {
   font-size: 0.9rem;
   margin-top: 5px;
 }
+.progress-hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid rgba(102, 212, 143, 0.18);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgba(102, 212, 143, 0.12), rgba(142, 197, 255, 0.06)),
+    rgba(20, 24, 32, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+.progress-hero-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.progress-hero-copy h2 {
+  font-size: clamp(1.65rem, 6vw, 2.15rem);
+  line-height: 1;
+}
+.progress-hero-copy p {
+  color: #d7dee7;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+.progress-hero-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: #07130c;
+  background: linear-gradient(135deg, var(--action-strong), var(--action));
+}
+.progress-section {
+  display: grid;
+  gap: 10px;
+}
+.progress-list {
+  display: grid;
+  gap: 9px;
+}
+.progress-list-row {
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.028);
+}
+.progress-list-row > svg {
+  color: var(--action);
+  justify-self: center;
+}
+.progress-list-row > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.progress-list-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.progress-list-row small,
+.progress-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+.progress-note {
+  padding: 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+}
 .chart-wrap {
   overflow-x: auto;
   padding-bottom: 2px;
