@@ -2947,3 +2947,317 @@ h2 { font-size: 1.5rem; }
     font-size: 0.81rem;
   }
 }
+
+/* Neo Brute theme pass */
+:root {
+  --bg: #111111;
+  --surface: #1a1a1a;
+  --surface-2: #242424;
+  --surface-3: #2c2c2c;
+  --border: #f7f7f5;
+  --text: #f7f7f5;
+  --muted: #b9b9ae;
+  --action: #c6ff00;
+  --action-strong: #d9ff47;
+  --amber: #ffcf33;
+  --accent: #ff4a4a;
+  --accent-strong: #ff6b4a;
+  --shadow: 7px 7px 0 #c6ff00;
+  --shadow-soft: 5px 5px 0 #c6ff00;
+  --radius-xl: 0;
+  --radius-lg: 0;
+  --radius-md: 0;
+  --radius-sm: 0;
+  --space-page: 16px;
+  --space-card: 16px;
+  --space-stack: 22px;
+  --recovery-ready: #c6ff00;
+  --recovery-recovering: #ff6b4a;
+  --recovery-fatigued: #ff4040;
+  --recovery-inactive: #3f454d;
+  --recovery-body-fill: #2b3038;
+  --recovery-body-border: rgba(247, 247, 245, 0.22);
+  --recovery-stroke: rgba(5, 6, 8, 0.72);
+  --recovery-selected-stroke: #f7f7f5;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background:
+    linear-gradient(90deg, rgba(247, 247, 245, 0.045) 1px, transparent 1px),
+    linear-gradient(rgba(247, 247, 245, 0.045) 1px, transparent 1px),
+    var(--bg);
+  background-size: 28px 28px;
+  color: var(--text);
+}
+
+input,
+select,
+textarea {
+  border: 3px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: 4px 4px 0 rgba(198, 255, 0, 0.92);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--action);
+  box-shadow: 5px 5px 0 var(--action);
+}
+
+h1,
+h2,
+h3,
+.section-header h2,
+.dashboard-card-head strong,
+.workout-type-copy strong,
+.template-title-row strong,
+.history-title-line strong,
+.exercise-title-input {
+  text-transform: uppercase;
+}
+
+.home-brand-icon,
+.brand-icon,
+.category-badge,
+.custom-sheet,
+.backup-card,
+.chart-card,
+.history-card,
+.template-card,
+.empty-panel,
+.exercise-card,
+.add-exercise-card,
+.notes-card,
+.chart-controls,
+.dashboard-card,
+.today-card,
+.settings-section,
+.stat-card,
+.info-modal,
+.photo-preview-modal {
+  border: 4px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.home-brand-icon {
+  background: var(--action);
+  padding: 6px;
+}
+
+.category-badge {
+  color: #111111;
+  background: var(--accent-strong);
+  box-shadow: none;
+}
+
+.category-badge.push,
+.category-badge.pull,
+.category-badge.upper,
+.category-badge.legs,
+.category-badge.full-body,
+.category-badge.core,
+.category-badge.cardio,
+.category-badge.custom {
+  background: var(--accent-strong);
+}
+
+.primary-button,
+.finish-button,
+.file-button,
+.secondary-button,
+.text-link,
+.icon-button,
+.mini-icon-button,
+.sheet-close,
+.history-chevron,
+.segmented-chip,
+.range-segmented,
+.save-status,
+.timer-pill,
+.workout-type-card {
+  border-radius: 0;
+}
+
+.primary-button,
+.finish-button,
+.file-button {
+  border: 4px solid var(--border);
+  background: var(--action);
+  color: #111111;
+  box-shadow: 5px 5px 0 var(--action);
+}
+
+.secondary-button,
+.icon-button,
+.mini-icon-button,
+.sheet-close,
+.history-chevron,
+.segmented-chip {
+  border: 3px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 4px 4px 0 rgba(198, 255, 0, 0.72);
+}
+
+.workout-type-card {
+  min-height: 102px;
+  border: 4px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.workout-type-card:first-child {
+  background: var(--action);
+  color: #111111;
+}
+
+.workout-type-card:first-child small {
+  color: rgba(17, 17, 17, 0.72);
+}
+
+.workout-type-card:first-child .category-badge {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.bottom-nav {
+  border: 4px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: 7px 7px 0 var(--action);
+  backdrop-filter: none;
+}
+
+.tab-button {
+  border-radius: 0;
+}
+
+.tab-button.active {
+  border: 3px solid var(--border);
+  background: var(--action);
+  color: #111111;
+}
+
+.today-card {
+  background: var(--surface);
+}
+
+.recovery-card {
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.recovery-card::before {
+  display: none;
+}
+
+.premium-eyebrow {
+  color: var(--accent-strong);
+}
+
+.anatomy-stage,
+.muscle-highlighter-stage {
+  border: 4px solid var(--border);
+  border-radius: 0;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.muscle-body-frame {
+  background: transparent;
+}
+
+.muscle-body-frame svg {
+  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.46));
+}
+
+.anatomy-view-label {
+  color: var(--text);
+  fill: var(--text);
+}
+
+.selected-muscle-panel,
+.consistency-detail {
+  border: 4px solid var(--border);
+  border-radius: 0;
+  background: var(--action);
+  color: #111111;
+}
+
+.selected-muscle-panel strong,
+.consistency-detail strong {
+  color: #111111;
+}
+
+.consistency-day {
+  border-radius: 0;
+  border-color: var(--border);
+  background: var(--surface-3);
+}
+
+.consistency-day.worked-out,
+.consistency-day.intensity-medium,
+.consistency-day.intensity-high {
+  background: var(--action);
+  border-color: var(--border);
+}
+
+.consistency-day.today {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px var(--accent-strong);
+}
+
+.history-delete {
+  border-radius: 0;
+  background: var(--accent);
+}
+
+.range-segmented {
+  border: 3px solid var(--border);
+  background: var(--surface-2);
+}
+
+.segmented-chip.active,
+.recovery-days-toggle button.active {
+  border-color: var(--border);
+  background: var(--action);
+  color: #111111;
+}
+
+.recovery-days-toggle,
+.filter-details[open] {
+  border: 3px solid var(--border);
+  border-radius: 0;
+  background: var(--surface-2);
+}
+
+.recovery-days-toggle button {
+  border-radius: 0;
+}
+
+@media (max-width: 640px) {
+  .home-brand-icon,
+  .custom-sheet,
+  .backup-card,
+  .chart-card,
+  .history-card,
+  .template-card,
+  .empty-panel,
+  .exercise-card,
+  .add-exercise-card,
+  .notes-card,
+  .chart-controls,
+  .dashboard-card,
+  .today-card,
+  .settings-section {
+    box-shadow: 4px 4px 0 var(--action);
+  }
+}

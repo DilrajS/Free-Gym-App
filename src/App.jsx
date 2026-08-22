@@ -1379,10 +1379,10 @@ const RECOVERY_MUSCLES = [
 
 const DEFAULT_RECOVERY_DAYS = 1;
 const RECOVERY_STATE_COLORS = {
-  ready: '#5fe08d',
-  recovering: '#ffb14a',
-  fatigued: '#ff5257',
-  inactive: '#37414d',
+  ready: 'var(--recovery-ready)',
+  recovering: 'var(--recovery-recovering)',
+  fatigued: 'var(--recovery-fatigued)',
+  inactive: 'var(--recovery-inactive)',
 };
 const RECOVERY_STATE_PRIORITY = {
   fatigued: 3,
@@ -1436,9 +1436,9 @@ const BACK_BODY_SLUG_MUSCLES = {
   calves: ['Calves'],
 };
 const MUSCLE_THUMBNAIL_STATE_COLORS = {
-  active: '#63df91',
-  secondary: '#50b8ff',
-  inactive: '#343d49',
+  active: 'var(--recovery-ready)',
+  secondary: 'var(--recovery-recovering)',
+  inactive: 'var(--recovery-inactive)',
 };
 
 function uniqueValues(values) {
@@ -1604,7 +1604,7 @@ function getRecoveryBodyData(recovery, side, selectedMuscle) {
       color: RECOVERY_STATE_COLORS[state],
       styles: {
         fill: RECOVERY_STATE_COLORS[state],
-        stroke: isSelected ? 'rgba(255,255,255,0.9)' : 'rgba(4,8,13,0.58)',
+        stroke: isSelected ? 'var(--recovery-selected-stroke)' : 'var(--recovery-stroke)',
         strokeWidth: isSelected ? 3 : 1.4,
       },
     };
@@ -1917,9 +1917,9 @@ function MuscleAnatomyGraphic({ recovery, selectedMuscle, onSelect }) {
           side={side}
           gender="male"
           scale={1}
-          border="rgba(209, 218, 231, 0.18)"
-          defaultFill="rgba(51, 61, 73, 0.74)"
-          defaultStroke="rgba(8, 12, 18, 0.7)"
+          border="var(--recovery-body-border)"
+          defaultFill="var(--recovery-body-fill)"
+          defaultStroke="var(--recovery-stroke)"
           defaultStrokeWidth={1.2}
           hiddenParts={getBodyHiddenParts(side)}
           onBodyPartPress={(part) => {
